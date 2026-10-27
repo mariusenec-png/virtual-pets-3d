@@ -108,7 +108,13 @@ export function PetModel({
     // Eyelids take the coat color around the eyes (a bit lighter than the body average).
     const bodyMat = furBody ? (Array.isArray(furBody.material) ? furBody.material[0] : furBody.material) : null;
     const lidColor = bodyMat ? averageAlbedo(bodyMat).multiplyScalar(1.3) : undefined;
-    const eyes = collectEyeParts(wrapper, species.model.eyePartPattern, lidColor);
+    const eyes = collectEyeParts(wrapper, species.model.eyePartPattern, {
+      lidColor,
+      body: furBody,
+      // Brows sit on top of the (short) fur around the eyes.
+      surfaceOffset: species.fur.lengthRatio * species.fur.profile.head * size.y * 0.9,
+      browWhiskers: species.id === 'cat',
+    });
     return { wrapper, root, materials, eyes, height: size.y, rig, animator, body: furBody, coat, furLayout };
   }, [scene, species]);
 
@@ -134,7 +140,7 @@ export function PetModel({
     const excluded: THREE.Mesh[] = [];
     prepared.wrapper.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh && m !== body && !m.userData.proxy) excluded.push(m);
+      if (m.isMesh && m !== body && !m.userData.proxy && !m.userData.noFurMask) excluded.push(m);
     });
     let handle: FurHandle | null = null;
     try {
@@ -174,7 +180,7 @@ export function PetModel({
 
     const animator = prepared.animator;
     if (animator) animator.update(motion.input, dt);
-    applyEyeScale(prepared.eyes, a0.eye, animator ? animator.blink : 1);
+    applyEyeScale(prepared.eyes, a0.eye, animator ? animator.blink : 1, animator?.brows);
 
     const handle = fur.current;
     if (!handle) return;

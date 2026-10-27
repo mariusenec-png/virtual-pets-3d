@@ -197,6 +197,8 @@ export class RigAnimator {
   private blinkStart = -1;
   /** Eye openness (1 = open, ~0 = closed); applied by the caller to the eye groups. */
   blink = 1;
+  /** Eyebrow expression, eased; applied by the caller with the eyes. */
+  readonly brows = { raise: 0, worry: 0, quirk: 0 };
   private eyeOpen = 1;
   // Idle look target (changes every few seconds).
   private lookYaw = 0;
@@ -550,6 +552,27 @@ export class RigAnimator {
     else if (beh === 'rest') open = Math.sin(t * 0.35) > 0.5 ? 0.35 : 0.9;
     this.eyeOpen = expDamp(this.eyeOpen, open, 6, dt);
     this.blink = Math.max(0, Math.min(this.eyeOpen, lid));
+
+    // ---- Eyebrows ----
+    let raise = 0;
+    let worry = 0;
+    let quirk = 0;
+    if (sleeping) raise = -0.3;
+    else if (act === 'refuse') worry = -0.8;
+    else if (act === 'confused') quirk = 1;
+    else if (act === 'play' || act === 'celebrate' || act === 'trick' || i.hop > 0) raise = 0.8;
+    else if (act === 'petted') raise = 0.25;
+    else if (beh === 'watch' || beh === 'beg' || beh === 'window' || beh === 'watchItem' || beh === 'toy') raise = 0.45;
+    if (!sleeping && act !== 'refuse' && (i.unwell || happy < 0.3)) {
+      worry = 0.85;
+      raise = Math.min(raise, 0.1);
+    }
+    // Small idle twitches so the face never looks frozen.
+    raise += 0.08 * Math.sin(t * 0.7) * Math.sin(t * 0.23);
+    const b = this.brows;
+    b.raise = expDamp(b.raise, raise, 6, dt);
+    b.worry = expDamp(b.worry, worry, 5, dt);
+    b.quirk = expDamp(b.quirk, quirk, 6, dt);
   }
 
   /**

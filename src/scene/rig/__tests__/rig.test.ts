@@ -129,7 +129,7 @@ describe('auto-rig', () => {
       pupil.position.set(x, 0.6, 0.495);
       head.add(eye, pupil);
     }
-    const eyes = collectEyeParts(head, '^eye', new THREE.Color('#888888'));
+    const eyes = collectEyeParts(head, '^eye', { lidColor: new THREE.Color('#888888'), browWhiskers: true });
     expect(eyes.length).toBe(2);
     for (const e of eyes) expect(e.lids).not.toBeNull();
     applyEyeScale(eyes, 1, 1);
@@ -138,5 +138,11 @@ describe('auto-rig', () => {
     expect(eyes[0].lids!.upper.rotation.x).toBeGreaterThan(open);
     expect(eyes[0].lids!.lower.rotation.x).toBeLessThan(Math.PI + 0.85);
     expect(eyes[0].pivot.scale.y).toBeCloseTo(1.2, 5);
+    // Brows move with expressions.
+    for (const e of eyes) expect(e.brow).not.toBeNull();
+    applyEyeScale(eyes, 1, 1, { raise: 0, worry: 0, quirk: 0 });
+    const y0 = eyes[0].brow!.group.position.y;
+    applyEyeScale(eyes, 1, 1, { raise: 1, worry: 0, quirk: 0 });
+    expect(eyes[0].brow!.group.position.y).toBeGreaterThan(y0);
   });
 });

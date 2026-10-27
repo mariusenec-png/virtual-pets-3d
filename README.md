@@ -188,11 +188,17 @@ that will work once the game is hosted on an HTTPS site.
   on the face and legs, roots are darker, the silhouette glows softly against the light and the
   coat has a silky highlight. High quality now uses 32 layers (Low stays at 12 for phones).
 
-### Eyelids (this version)
+### Eyelids
 
 - Cats and dogs have real eyelids now (upper and lower lid with a lash line) instead of squashing
   the eyes: they blink every few seconds, half-close when petted or feeling ill, give slow blinks
   while watching you, and close their eyes when sleeping.
+
+### Eyelashes and eyebrows (this version)
+
+- Eyelashes on the upper lids (they move with every blink) and eyebrows that sit on the fur and
+  show emotions: raised when playing or curious, worried when sad or ill, frowning when refusing,
+  one brow up when confused. Cats also have long eyebrow whiskers.
 
 ## Publishing (GitHub Pages)
 

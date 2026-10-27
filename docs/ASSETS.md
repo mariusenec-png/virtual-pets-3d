@@ -45,6 +45,12 @@ shells in the coat color (average of the body material and its texture) with a d
 rotate over it. The animator's eye openness drives them: blinking every few seconds, half-closed
 when petted or ill, slow blinks while watching you or resting, closed while sleeping.
 
+Eyelashes are a curved band on the upper lid edge with a drawn, alpha-tested lash texture (they
+follow the lid when blinking). Eyebrows are soft tubes above each eye, placed on the head surface
+(nearest body vertex, pushed out by the fur thickness) and moved by the animator's expression:
+raised when playing or interested, worried when sad or ill, cross when refusing, one brow up when
+confused. Cats also get three long eyebrow whiskers.
+
 ### Procedural animation
 
 `src/scene/rig/animator.ts` builds a target pose every frame from layers and eases every bone

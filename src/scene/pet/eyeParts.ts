@@ -12,6 +12,36 @@ import * as THREE from 'three';
 export interface EyeGroup {
   pivot: THREE.Group;
   lids: Lids | null;
+  brow: Brow | null;
+}
+
+/** Options for the extra eye details (eyelids, lashes, brows). */
+export interface EyeOptions {
+  /** Coat color around the eyes; enables eyelids, lashes and brows. */
+  lidColor?: THREE.Color;
+  /** Body mesh, so brows can sit on the head surface. */
+  body?: THREE.Mesh | null;
+  /** How far above the skin the brows float (fur thickness), model units. */
+  surfaceOffset?: number;
+  /** Cats: a few long whiskers above each eye. */
+  browWhiskers?: boolean;
+}
+
+/** Brow expression: raised (+) / lowered (-), worried (+) / cross (-), one brow up. */
+export interface BrowExpression {
+  raise: number;
+  worry: number;
+  quirk: number;
+}
+
+interface Brow {
+  group: THREE.Object3D;
+  basePosition: THREE.Vector3;
+  baseQuaternion: THREE.Quaternion;
+  /** +1 when the brow's local +X points towards the nose. */
+  innerSign: number;
+  /** Vertical size of the eye, scales the brow movement. */
+  lift: number;
 }
 
 interface Lids {
@@ -31,7 +61,8 @@ const tmpSphere = new THREE.Sphere();
  * pivot groups are inserted under that parent. With `lidColor` each eye gets
  * eyelids in that color.
  */
-export function collectEyeParts(root: THREE.Object3D, pattern: string, lidColor?: THREE.Color): EyeGroup[] {
+export function collectEyeParts(root: THREE.Object3D, pattern: string, options: EyeOptions = {}): EyeGroup[] {
+  const lidColor = options.lidColor;
   const re = new RegExp(pattern, 'i');
   root.updateWorldMatrix(true, true);
   const parts: { node: THREE.Mesh; center: THREE.Vector3; radius: number }[] = [];
@@ -62,8 +93,10 @@ export function collectEyeParts(root: THREE.Object3D, pattern: string, lidColor?
     pivot.position.copy(a.parent.worldToLocal(a.center.clone()));
     pivot.updateMatrixWorld(true);
     for (const m of a.members) pivot.attach(m);
-    const lids = lidColor ? buildLids(pivot, a.members, lidColor) : null;
-    return { pivot, lids };
+    const frame = lidColor ? eyeFrame(pivot, a.members) : null;
+    const lids = frame && lidColor ? buildLids(pivot, frame, lidColor) : null;
+    const brow = frame && lidColor ? buildBrow(pivot, frame, lidColor, options) : null;
+    return { pivot, lids, brow };
   });
 }
 
@@ -79,11 +112,17 @@ const UPPER_CLOSED = 0.25;
 const LOWER_OPEN = Math.PI + 0.85;
 const LOWER_CLOSED = Math.PI + 0.2;
 
-function buildLids(
-  pivot: THREE.Group,
-  members: THREE.Mesh[],
-  color: THREE.Color,
-): Lids | null {
+interface EyeFrame {
+  center: THREE.Vector3;
+  side: THREE.Vector3;
+  up: THREE.Vector3;
+  gaze: THREE.Vector3;
+  /** Half sizes of the ellipsoid around the eye along side / up / gaze. */
+  radii: THREE.Vector3;
+}
+
+/** Fits an ellipsoid around the eye parts, oriented along the eye's gaze (pivot space). */
+function eyeFrame(pivot: THREE.Group, members: THREE.Mesh[]): EyeFrame | null {
   if (members.length === 0) return null;
   // Eye parts in pivot space: the largest is the eyeball, the rest sit in front (pupil, iris, glint).
   const toPivot = new THREE.Matrix4().copy(pivot.matrixWorld).invert();
@@ -120,7 +159,11 @@ function buildLids(
   };
   const radii = new THREE.Vector3(half(side), half(up), half(gaze)).multiplyScalar(1.12);
   if (!(radii.x > 0 && radii.y > 0 && radii.z > 0)) return null;
+  return { center: ballCenter, side, up, gaze, radii };
+}
 
+function buildLids(pivot: THREE.Group, f: EyeFrame, color: THREE.Color): Lids {
+  const { center: ballCenter, side, up, gaze, radii } = f;
   const frame = new THREE.Group();
   frame.name = 'eyelids';
   frame.position.copy(ballCenter);
@@ -152,16 +195,233 @@ function buildLids(
   };
   const upper = makeLid('upper-lid', UPPER_OPEN);
   const lower = makeLid('lower-lid', LOWER_OPEN);
+  // Eyelashes on the upper lid: they follow it when blinking.
+  const lashes = new THREE.Mesh(lashGeometry(), lashMaterial(color.clone().multiplyScalar(0.1)));
+  lashes.name = 'eyelashes';
+  lashes.castShadow = false;
+  lashes.raycast = () => {};
+  lashes.userData.noFurMask = true;
+  upper.lid.add(lashes);
   return { upper: upper.lid, lower: lower.lid, upperEdge: upper.edge, lowerEdge: lower.edge };
 }
+
+let lashTexture: THREE.CanvasTexture | null = null;
+
+/** Alpha texture with tapered, slightly curved lash strands (roots at the bottom). */
+function lashMap(): THREE.CanvasTexture | null {
+  if (lashTexture) return lashTexture;
+  if (typeof document === 'undefined') return null;
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 64;
+  const ctx = c.getContext('2d');
+  if (!ctx) return null;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineCap = 'round';
+  const count = 26;
+  for (let i = 0; i < count; i++) {
+    const x = 8 + (i / (count - 1)) * 240;
+    const len = 0.7 + 0.3 * Math.abs(Math.sin(i * 1.7));
+    // Lashes fan out from the middle of the lid.
+    const lean = ((x - 128) / 128) * 14;
+    for (let k = 0; k < 6; k++) {
+      ctx.lineWidth = 4.2 - k * 0.62;
+      ctx.beginPath();
+      const y0 = 64 - (k / 6) * 60 * len;
+      const y1 = 64 - ((k + 1) / 6) * 60 * len;
+      ctx.moveTo(x + lean * (k / 6) ** 2, y0);
+      ctx.lineTo(x + lean * ((k + 1) / 6) ** 2, y1);
+      ctx.stroke();
+    }
+  }
+  lashTexture = new THREE.CanvasTexture(c);
+  lashTexture.colorSpace = THREE.SRGBColorSpace;
+  return lashTexture;
+}
+
+function lashMaterial(color: THREE.Color): THREE.Material {
+  const map = lashMap();
+  return new THREE.MeshStandardMaterial({
+    color,
+    map,
+    alphaMap: map,
+    alphaTest: 0.35,
+    transparent: false,
+    side: THREE.DoubleSide,
+    roughness: 0.6,
+  });
+}
+
+/**
+ * A curved band along the front half of the upper lid edge (lid space: the
+ * edge is the unit circle in the XZ plane, the lid dome points to +Y).
+ * Lashes grow outwards and curl up.
+ */
+function lashGeometry(): THREE.BufferGeometry {
+  const seg = 18;
+  const u0 = 0.12 * Math.PI;
+  const u1 = 0.88 * Math.PI;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const index: number[] = [];
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg;
+    const u = u0 + (u1 - u0) * t;
+    const x = Math.cos(u);
+    const z = Math.sin(u);
+    // Longer in the middle of the lid.
+    const reach = 0.3 + 0.2 * Math.sin(Math.PI * t);
+    pos.push(x * 1.02, 0, z * 1.02, x * (1 + reach), reach * 0.75, z * (1 + reach));
+    uv.push(t, 0, t, 1);
+    if (i < seg) {
+      const a = i * 2;
+      index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(index);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Nearest body vertex (pivot space) and its normal, for sitting brows on the head. */
+function surfacePoint(
+  body: THREE.Mesh,
+  toPivot: THREE.Matrix4,
+  normalMatrix: THREE.Matrix3,
+  target: THREE.Vector3,
+): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
+  const pos = body.geometry.getAttribute('position');
+  const nor = body.geometry.getAttribute('normal');
+  if (!pos || !nor) return null;
+  // Search in body space (no per-vertex matrix multiply).
+  const local = target.clone().applyMatrix4(new THREE.Matrix4().copy(toPivot).invert());
+  let best = -1;
+  let bestD = Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const dx = pos.getX(i) - local.x;
+    const dy = pos.getY(i) - local.y;
+    const dz = pos.getZ(i) - local.z;
+    const d = dx * dx + dy * dy + dz * dz;
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  if (best < 0) return null;
+  return {
+    point: new THREE.Vector3().fromBufferAttribute(pos, best).applyMatrix4(toPivot),
+    normal: new THREE.Vector3().fromBufferAttribute(nor, best).applyMatrix3(normalMatrix).normalize(),
+  };
+}
+
+/** A soft arc above the eye (plus whiskers for cats), sitting on the head. */
+function buildBrow(pivot: THREE.Group, f: EyeFrame, coat: THREE.Color, options: EyeOptions): Brow | null {
+  const { center, side, up, gaze, radii } = f;
+  // Which way is the nose? Pivot axes are the model's axes; the head's midline is x = 0.
+  const towardNose = new THREE.Vector3(pivot.position.x > 0 ? -1 : 1, 0, 0);
+  const innerSign = side.dot(towardNose) >= 0 ? 1 : -1;
+
+  const toPivot = options.body ? new THREE.Matrix4().copy(pivot.matrixWorld).invert().multiply(options.body.matrixWorld) : null;
+  const normalMatrix = toPivot ? new THREE.Matrix3().getNormalMatrix(toPivot) : null;
+  const offset = options.surfaceOffset ?? radii.y * 0.3;
+
+  // Arc above the eye: higher in the middle, the inner end a little lower.
+  const points: THREE.Vector3[] = [];
+  for (let k = 0; k <= 6; k++) {
+    const t = -1 + (2 * k) / 6;
+    const p = center
+      .clone()
+      .addScaledVector(side, t * radii.x * 1.05)
+      .addScaledVector(up, radii.y * (1.55 - 0.22 * t * t - 0.08 * t * innerSign))
+      .addScaledVector(gaze, radii.z * 0.1);
+    if (options.body && toPivot && normalMatrix) {
+      const s = surfacePoint(options.body, toPivot, normalMatrix, p);
+      if (s && s.point.distanceTo(p) < radii.y * 1.5) p.copy(s.point).addScaledVector(s.normal, offset);
+    }
+    points.push(p);
+  }
+  const mid = points[3].clone();
+  const group = new THREE.Group();
+  group.name = 'brow';
+  group.position.copy(mid);
+  group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side, up, gaze));
+  pivot.add(group);
+  group.updateMatrixWorld(true);
+  const toBrow = new THREE.Matrix4().copy(group.matrix).invert();
+  const local = points.map((p) => p.clone().applyMatrix4(toBrow));
+
+  const curve = new THREE.CatmullRomCurve3(local);
+  const thickness = radii.y * 0.11;
+  const tube = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 24, thickness, 6, false),
+    new THREE.MeshStandardMaterial({ color: coat.clone().multiplyScalar(0.42), roughness: 0.9 }),
+  );
+  tube.name = 'eyebrow';
+  group.add(tube);
+
+  if (options.browWhiskers) {
+    const whiskerMat = new THREE.MeshStandardMaterial({ color: '#f1ede4', roughness: 0.5 });
+    const outer = -innerSign;
+    [0.25, 0.5, 0.75].forEach((t, i) => {
+      const start = curve.getPoint(0.5 + outer * t * 0.5);
+      const len = radii.y * (2.0 + 0.4 * i);
+      const dir = new THREE.Vector3(outer * (0.35 + 0.2 * i), 1, 0.25).normalize();
+      const bend = new THREE.Vector3(outer * 0.4, 0, 0.2);
+      const pts = [0, 0.5, 1].map((s) =>
+        start.clone().addScaledVector(dir, len * s).addScaledVector(bend, len * s * s * 0.3),
+      );
+      const whisker = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 8, radii.y * 0.022, 4, false),
+        whiskerMat,
+      );
+      whisker.name = 'brow-whisker';
+      group.add(whisker);
+    });
+  }
+  group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.castShadow = false;
+    m.raycast = () => {};
+    // Brows sit on top of the fur: the fur must not be cleared around them.
+    m.userData.noFurMask = true;
+  });
+  return {
+    group,
+    basePosition: group.position.clone(),
+    baseQuaternion: group.quaternion.clone(),
+    innerSign,
+    lift: radii.y,
+  };
+}
+
+const tmpQuat = new THREE.Quaternion();
+const zAxis = new THREE.Vector3(0, 0, 1);
 
 /**
  * Scales eyes around their centers (1 = original size) and sets how open
  * they are (1 = open, 0 = closed). Eyes without lids fall back to squashing.
+ * `brows` moves the eyebrows (expressions).
  */
-export function applyEyeScale(eyes: EyeGroup[], scale: number, open = 1): void {
+export function applyEyeScale(eyes: EyeGroup[], scale: number, open = 1, brows?: BrowExpression): void {
   const closed = 1 - Math.min(1, Math.max(0, open));
-  for (const e of eyes) {
+  eyes.forEach((e, index) => {
+    if (e.brow) {
+      const b = e.brow;
+      const raise = (brows?.raise ?? 0) + (index === 0 ? (brows?.quirk ?? 0) * 0.8 : 0);
+      // Brows also follow the lids a little when the eyes close.
+      const droop = closed * 0.25;
+      b.group.position.copy(b.basePosition);
+      b.group.quaternion.copy(b.baseQuaternion);
+      b.group.translateY((raise * 0.35 - droop) * b.lift);
+      // Worried: inner ends up; cross: inner ends down.
+      const tilt = b.innerSign * (brows?.worry ?? 0) * 0.32 - (index === 0 ? (brows?.quirk ?? 0) * 0.15 * b.innerSign : 0);
+      b.group.quaternion.multiply(tmpQuat.setFromAxisAngle(zAxis, tilt));
+    }
+
     if (e.lids) {
       e.pivot.scale.setScalar(scale);
       const up = UPPER_OPEN + (UPPER_CLOSED - UPPER_OPEN) * closed;
@@ -174,7 +434,7 @@ export function applyEyeScale(eyes: EyeGroup[], scale: number, open = 1): void {
     } else {
       e.pivot.scale.set(scale, scale * Math.max(0.06, open), scale);
     }
-  }
+  });
 }
 
 /** Average color of a material (base color times its texture, if any). */
