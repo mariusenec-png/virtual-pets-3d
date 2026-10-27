@@ -57,6 +57,12 @@ overlay (window, watch, groom, sniff, toy, tail chase, rest, stretch, begging by
 (`trick` / `confused` activities) have their own overlays; Roll over also rolls the whole model
 around the body center (`computeRiggedOuterPose`).
 
+## Furniture (milestone 9)
+
+All furniture is procedural three.js geometry (`src/scene/decor/furnitureModels.ts`), no external
+models or textures (the rope and tile patterns are drawn on a canvas). The catalog with prices,
+comfort and what pets do with each piece is in `src/config/decor.ts`.
+
 ## Fur
 
 Fur is rendered in real time with **shell texturing** (`src/scene/fur/furShells.ts`): the body

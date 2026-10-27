@@ -68,6 +68,7 @@ function maybeGetSick(pet: PetState, dt: number, rng: Rng, events: GameEvent[]):
 /** Advances a single pet by `dt` in-game hours. Mutates `pet`. */
 function stepPet(
   pet: PetState,
+  comfort: number,
   dt: number,
   species: SpeciesDefinition,
   opts: SimulateOptions,
@@ -84,7 +85,9 @@ function stepPet(
   n.satiety -= DECAY.awake.satiety * mult(species, illness, personality, 'satiety') * (asleep ? sleepM.satiety : 1) * dt;
   n.hydration -= DECAY.awake.hydration * mult(species, illness, personality, 'hydration') * (asleep ? sleepM.hydration : 1) * dt;
   n.hygiene -= DECAY.awake.hygiene * mult(species, illness, personality, 'hygiene') * (asleep ? sleepM.hygiene : 1) * dt;
-  n.happiness -= DECAY.awake.happiness * mult(species, illness, personality, 'happiness') * (asleep ? sleepM.happiness : 1) * dt;
+  // A comfortable, well-furnished room makes the pet less prone to boredom.
+  n.happiness -=
+    DECAY.awake.happiness * mult(species, illness, personality, 'happiness') * (asleep ? sleepM.happiness : 1) * (1 - comfort) * dt;
 
   if (asleep) {
     n.energy += DECAY.sleepEnergyGain * dt;
@@ -156,7 +159,7 @@ export function simulateHours(state: GameState, gameHours: number, opts: Simulat
   let remaining = opts.offline ? Math.min(gameHours, SIMULATION.offline.maxCatchUpHours) : gameHours;
   while (remaining > 1e-9) {
     const dt = Math.min(remaining, SIMULATION.maxStepHours);
-    stepPet(pet, dt, species, opts, rng, events);
+    stepPet(pet, next.comfort ?? 0, dt, species, opts, rng, events);
     remaining -= dt;
   }
 

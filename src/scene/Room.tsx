@@ -2,6 +2,9 @@ import { RoundedBox } from '@react-three/drei';
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { ROOM_LAYOUT } from '../config/activities';
+import { getDecor, ROOM } from '../config/decor';
+import { useGameStore } from '../store/gameStore';
+import { DecorLayer } from './decor/DecorLayer';
 import { Bowl } from './props/Bowl';
 import { PetBed } from './props/PetBed';
 import { ToyBasket } from './props/ToyBasket';
@@ -11,9 +14,36 @@ import { ToyBasket } from './props/ToyBasket';
  * assets. Props that react to gameplay (bowls, bed) live in ./props.
  */
 
-const WALL = '#efe3d3';
-const WALL_TRIM = '#d9c7b0';
-const FLOOR = '#c69a6d';
+function themeColors(id: string, fallback: string) {
+  const c = getDecor(id)?.colors ?? getDecor(fallback)!.colors!;
+  return { main: c.main, accent: c.accent ?? c.main };
+}
+
+function useTileTexture(): THREE.CanvasTexture {
+  return useMemo(() => {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 256;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillStyle = '#d6d0c6';
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillRect(128, 128, 128, 128);
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(0, 0, 128, 128);
+    ctx.strokeRect(128, 128, 128, 128);
+    ctx.strokeRect(128, 0, 128, 128);
+    ctx.strokeRect(0, 128, 128, 128);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(6, 6);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }, []);
+}
 
 function useWoodTexture(): THREE.CanvasTexture {
   return useMemo(() => {
@@ -143,21 +173,34 @@ function Shelf() {
 
 export function Room() {
   const wood = useWoodTexture();
+  const tiles = useTileTexture();
+  const room = useGameStore((s) => s.household.room);
+  const wall = themeColors(room.wall, ROOM.defaults.wall);
+  const floor = themeColors(room.floor, ROOM.defaults.floor);
+  const rug = themeColors(room.rug, ROOM.defaults.rug);
+  const tiled = room.floor === 'floorTiles';
+  const WALL = wall.main;
+  const WALL_TRIM = wall.accent;
   return (
     <group>
       {/* Floor */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[6, 6]} />
-        <meshStandardMaterial map={wood} color={FLOOR} roughness={0.75} />
+        <meshStandardMaterial
+          key={tiled ? 'tiles' : 'wood'}
+          map={tiled ? tiles : wood}
+          color={floor.main}
+          roughness={tiled ? 0.45 : 0.75}
+        />
       </mesh>
       {/* Rug */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0.15]} receiveShadow>
         <circleGeometry args={[1.0, 64]} />
-        <meshStandardMaterial color="#e9c9a8" roughness={1} />
+        <meshStandardMaterial color={rug.main} roughness={1} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0.15]} receiveShadow>
         <ringGeometry args={[0.82, 0.88, 64]} />
-        <meshStandardMaterial color="#d4a27c" roughness={1} />
+        <meshStandardMaterial color={rug.accent} roughness={1} />
       </mesh>
       {/* Walls */}
       <mesh position={[0, 1.5, -2.5]} receiveShadow>
@@ -191,6 +234,7 @@ export function Room() {
       <Bowl kind="water" position={ROOM_LAYOUT.waterBowl} />
       <PetBed position={ROOM_LAYOUT.bed} />
       <ToyBasket position={ROOM_LAYOUT.toyBasket} />
+      <DecorLayer />
     </group>
   );
 }

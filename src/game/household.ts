@@ -3,6 +3,7 @@ import { STARTING_COINS } from '../config/progression';
 import { SIMULATION } from '../config/simulation';
 import { getSpecies } from '../species/registry';
 import { createPet, defaultSettings, sanitizePetName } from './createGame';
+import { defaultRoom, roomComfort } from './decor';
 import { clamp, MS_PER_HOUR } from './math';
 import { unlockedToysForLevel } from './progression';
 import { simulateHours, type SimulateOptions } from './simulation';
@@ -28,6 +29,7 @@ export function createHousehold(now: number, settings: Settings = defaultSetting
     inventory: { food: { ...STARTING_FOOD } },
     settings: { ...settings },
     daily: { lastClaimDay: null, streak: 0 },
+    room: defaultRoom(),
     lastSimulatedAt: now,
   };
 }
@@ -45,6 +47,7 @@ export function focus(h: Household, petId: string | null = h.activePetId): GameS
     inventory: h.inventory,
     unlockedToys: pet ? unlockedToysForLevel(pet.species, pet.level) : [],
     settings: h.settings,
+    comfort: roomComfort(h.room),
     lastSimulatedAt: h.lastSimulatedAt,
   };
 }

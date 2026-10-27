@@ -102,6 +102,17 @@ export interface AudioSettings {
 
 export type FurQuality = 'off' | 'low' | 'high';
 
+/** Room decoration, shared by all pets (see src/config/decor.ts). */
+export interface RoomState {
+  wall: string;
+  floor: string;
+  rug: string;
+  /** Bought decor ids (themes and furniture; each can be owned once). */
+  owned: string[];
+  /** Furniture placed in the room: slot id -> decor id. */
+  placed: Record<string, string>;
+}
+
 /**
  * Everything that is saved: all pets plus what they share (coins, food,
  * settings). Game rules operate on a single-pet GameState view of it
@@ -115,6 +126,7 @@ export interface Household {
   settings: Settings;
   /** Daily reward streak. */
   daily: { lastClaimDay: string | null; streak: number };
+  room: RoomState;
   /** Real timestamp (ms) up to which the simulation has been applied. */
   lastSimulatedAt: number;
 }
@@ -132,6 +144,8 @@ export interface GameState {
   inventory: Inventory;
   unlockedToys: string[];
   settings: Settings;
+  /** 0..1 reduction of happiness decay from the room's furniture. */
+  comfort: number;
   /** Real timestamp (ms) up to which the simulation has been applied. */
   lastSimulatedAt: number;
 }

@@ -80,7 +80,7 @@ describe('auto-rig', () => {
         (id) => ['trick', id, null] as [RigAnimInput['activity'], string | null, RigAnimInput['behavior']],
       ),
       ['confused', 'paw', null],
-      ...(['look', 'window', 'beg', 'watch', 'groom', 'sniff', 'toy', 'chaseTail', 'rest', 'stretch'] as const).map(
+      ...(['look', 'window', 'beg', 'watch', 'groom', 'sniff', 'toy', 'chaseTail', 'rest', 'stretch', 'scratch', 'watchItem'] as const).map(
         (b) => [null, null, b] as [RigAnimInput['activity'], string | null, RigAnimInput['behavior']],
       ),
     ];

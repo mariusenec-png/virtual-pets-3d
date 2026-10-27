@@ -146,7 +146,7 @@ that will work once the game is hosted on an HTTPS site.
   darker back and a lighter belly.
 - Softer, more natural lighting (procedural environment light).
 
-### Milestone 8 (this version)
+### Milestone 8
 
 - **A life of its own**: when you leave the pet alone it does things by itself: strolls around
   the rug, sits under the window and looks out, comes to the front and watches you (cats give a
@@ -164,6 +164,22 @@ that will work once the game is hosted on an HTTPS site.
   mastering a trick (100%) pays 25 coins, and a mastered trick always works. Training is not
   possible while asleep, sick, exhausted or very sad. Each trick has its own animation; a failed
   try shows a puzzled pet.
+
+### Milestone 9 (this version)
+
+- **Decorate the room** (🛋️ in the top bar): a shop with 10 pieces of furniture (cardboard box,
+  floor cushion, scratching post, cat tree, dog house, armchair, aquarium with swimming fish, big
+  plant, floor lamp that really lights the room, bookshelf), 6 wall colors, 4 floors (oak, walnut,
+  birch, tiles) and 4 rugs. Everything is bought once with coins and shared by all pets.
+- Furniture stands in 6 spots along the walls: "Place"/"Move" shows glowing spots in the room,
+  click one (Esc cancels). An occupied spot swaps the old piece back to storage; "Put away" frees
+  a spot.
+- **Pets use the furniture on their own**: cats jump up and sit on the cat tree, curl up in the box,
+  nap on the armchair or cushion, stretch up the scratching post; dogs nap at the dog house and on
+  the cushion; both sit in front of the aquarium following the fish. They step up onto raised
+  surfaces with a little jump.
+- **Comfort**: each placed piece makes pets get bored a bit slower (happiness decays up to 30%
+  slower), so coins now have a long-term use. Saves from earlier versions get the default room.
 
 ## Publishing (GitHub Pages)
 

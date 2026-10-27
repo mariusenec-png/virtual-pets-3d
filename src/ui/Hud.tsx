@@ -104,7 +104,7 @@ export function SaveIndicator() {
   );
 }
 
-export function TopBar({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function TopBar({ onOpenSettings, onOpenDecor }: { onOpenSettings: () => void; onOpenDecor: () => void }) {
   const coins = useGameStore((s) => s.game.coins);
   const timeScale = useGameStore((s) => s.game.settings.timeScale);
   const preset = TIME_SCALE_PRESETS.find((p) => p.value === timeScale);
@@ -133,6 +133,9 @@ export function TopBar({ onOpenSettings }: { onOpenSettings: () => void }) {
         title={muted ? t('top.unmute') : t('top.mute')}
       >
         {muted ? '🔇' : '🔊'}
+      </button>
+      <button className="icon-btn" onClick={onOpenDecor} aria-label={t('top.decor')} title={t('top.decor')}>
+        🛋️
       </button>
       <button className="icon-btn" onClick={onOpenSettings} aria-label={t('top.settings')} title={t('top.settings')}>
         ⚙️

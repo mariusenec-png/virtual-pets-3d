@@ -5,6 +5,7 @@ import { FOODS } from '../config/items';
 import { MAX_LEVEL } from '../config/progression';
 import { SIMULATION } from '../config/simulation';
 import { defaultSettings, sanitizePetName } from '../game/createGame';
+import { sanitizeRoom } from '../game/decor';
 import { createHousehold, MAX_PETS } from '../game/household';
 import { clamp, clampNeed, isFiniteNumber } from '../game/math';
 import type { ActionId, Household, NeedId, PetState, Settings } from '../game/types';
@@ -204,6 +205,9 @@ export function sanitizeHousehold(raw: unknown, now: number): { household: House
         : null,
     streak: Math.floor(num(dailyRaw.streak, 0, 0, 7, { repaired: false })),
   };
+
+  // Added in milestone 9: older saves start with the default room.
+  household.room = sanitizeRoom(r.room);
 
   const invRaw = (r.inventory as Record<string, unknown> | undefined)?.food;
   if (invRaw && typeof invRaw === 'object') {

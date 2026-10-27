@@ -35,6 +35,8 @@ import type { GameState } from '../types';
 import { getPersonality, personalityFromId, PERSONALITIES, randomPersonality } from '../../config/personality';
 import { TRAINING, TRICKS, trickLevel } from '../../config/tricks';
 import { practiceTrick, trainingBlockedReason, trickSuccessChance } from '../tricks';
+import { DECOR_SLOTS, getDecor, ROOM } from '../../config/decor';
+import { buyDecor, placeDecor, removeDecor, roomComfort, sanitizeRoom, setTheme, slotOf } from '../decor';
 
 const T0 = 1_700_000_000_000;
 
@@ -803,6 +805,95 @@ describe('tricks and personality', () => {
     expect(PERSONALITIES.map((p) => p.id)).toContain(pet.personality);
     expect(pet.tricks).toEqual({});
     expect(pet.stats.tricks).toBe(0);
+  });
+});
+
+describe('room decoration', () => {
+  function richHome() {
+    const h = newHome();
+    return { ...h, coins: 2000 };
+  }
+
+  it('starts with the free themes and an empty room', () => {
+    const h = newHome();
+    expect(h.room.wall).toBe(ROOM.defaults.wall);
+    expect(Object.keys(h.room.placed).length).toBe(0);
+    expect(roomComfort(h.room)).toBe(0);
+    expect(focus(h).comfort).toBe(0);
+  });
+
+  it('buying costs coins, places furniture and cannot be repeated', () => {
+    const h = richHome();
+    const r = buyDecor(h, 'catTree');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.household.coins).toBe(2000 - getDecor('catTree')!.price);
+    expect(slotOf(r.household.room, 'catTree')).not.toBeNull();
+    expect(buyDecor(r.household, 'catTree').ok).toBe(false);
+    const poor = { ...newHome(), coins: 5 };
+    expect(buyDecor(poor, 'aquarium').ok).toBe(false);
+    expect(buyDecor(h, 'nope').ok).toBe(false);
+  });
+
+  it('buying a theme applies it; owned themes can be switched', () => {
+    let h = richHome();
+    const r = buyDecor(h, 'wallSage');
+    if (!r.ok) throw new Error(r.reason);
+    h = r.household;
+    expect(h.room.wall).toBe('wallSage');
+    const back = setTheme(h, 'wall', 'wallCream');
+    expect(back.ok && back.household.room.wall).toBe('wallCream');
+    expect(setTheme(h, 'wall', 'wallSky').ok).toBe(false);
+    expect(setTheme(h, 'floor', 'wallSage').ok).toBe(false);
+  });
+
+  it('placing swaps the previous occupant to storage; removing frees the slot', () => {
+    let h = richHome();
+    for (const id of ['box', 'cushion']) {
+      const r = buyDecor(h, id);
+      if (!r.ok) throw new Error(r.reason);
+      h = r.household;
+    }
+    const boxSlot = slotOf(h.room, 'box')!;
+    const r = placeDecor(h, 'cushion', boxSlot);
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.household.room.placed[boxSlot]).toBe('cushion');
+    expect(slotOf(r.household.room, 'box')).toBeNull();
+    expect(Object.values(r.household.room.placed).filter((id) => id === 'cushion').length).toBe(1);
+    const cleared = removeDecor(r.household, boxSlot);
+    expect(cleared.room.placed[boxSlot]).toBeUndefined();
+    expect(placeDecor(h, 'aquarium', boxSlot).ok).toBe(false);
+    expect(placeDecor(h, 'box', 'roof').ok).toBe(false);
+  });
+
+  it('comfort is capped and slows boredom', () => {
+    let h = { ...richHome(), coins: 100000 };
+    for (const id of ['catTree', 'kennel', 'aquarium', 'cushion', 'armchair', 'scratchPost']) {
+      const r = buyDecor(h, id);
+      if (!r.ok) throw new Error(r.reason);
+      h = r.household;
+    }
+    expect(Object.keys(h.room.placed).length).toBe(DECOR_SLOTS.length);
+    expect(roomComfort(h.room)).toBeLessThanOrEqual(ROOM.maxComfort);
+    const cozy = focus(h);
+    const bare = focus(newHome());
+    const a = simulateHours(cozy, 3, { offline: false, rng: () => 0.99 }).state.pet!;
+    const b = simulateHours(bare, 3, { offline: false, rng: () => 0.99 }).state.pet!;
+    expect(a.needs.happiness).toBeGreaterThan(b.needs.happiness);
+  });
+
+  it('sanitizes rooms from saves', () => {
+    const room = sanitizeRoom({
+      wall: 'wallSky',
+      owned: ['catTree', 'bogus', 'wallSage'],
+      placed: { backLeft: 'catTree', right: 'catTree', left: 'aquarium', nowhere: 'catTree' },
+    });
+    expect(room.wall).toBe(ROOM.defaults.wall);
+    expect(room.owned).toContain('wallSage');
+    expect(room.placed.backLeft).toBe('catTree');
+    expect(room.placed.right).toBeUndefined();
+    expect(room.placed.left).toBeUndefined();
+    expect(sanitizeRoom(null).placed).toEqual({});
   });
 });
 

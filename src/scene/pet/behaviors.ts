@@ -19,9 +19,11 @@ export type BehaviorAnim =
   | 'toy'
   | 'chaseTail'
   | 'rest'
-  | 'stretch';
+  | 'stretch'
+  | 'scratch'
+  | 'watchItem';
 
-export type BehaviorKind = BehaviorAnim | 'wander' | 'begWater';
+export type BehaviorKind = BehaviorAnim | 'wander' | 'begWater' | 'furniture';
 
 export type Vec2 = [number, number];
 
@@ -38,6 +40,16 @@ export interface Behavior {
   vocal: boolean;
 }
 
+/** A place in the room where furniture invites the pet to do something. */
+export interface FurnitureSpot {
+  itemId: string;
+  anim: BehaviorAnim;
+  target: Vec2;
+  face: Vec2 | 'camera';
+  weight: number;
+  duration: [number, number];
+}
+
 export interface PlannerContext {
   species: SpeciesId;
   personality: PersonalityId;
@@ -45,6 +57,8 @@ export interface PlannerContext {
   unwell: boolean;
   /** Current position (x, z). */
   position: Vec2;
+  /** Furniture this species likes, already in world coordinates. */
+  furniture?: FurnitureSpot[];
 }
 
 type Rng = () => number;
@@ -104,6 +118,10 @@ export function behaviorWeights(ctx: PlannerContext): Record<BehaviorKind, numbe
     look: 1.5,
     beg: n.satiety < 45 ? 6 : 0,
     begWater: n.hydration < 45 ? 6 : 0,
+    furniture: 0,
+    // Only offered through furniture spots.
+    scratch: 0,
+    watchItem: 0,
   };
   switch (ctx.personality) {
     case 'playful':
@@ -150,11 +168,41 @@ export function behaviorWeights(ctx: PlannerContext): Record<BehaviorKind, numbe
   return w;
 }
 
+/** Weight of one furniture spot for this pet right now. */
+export function furnitureWeight(spot: FurnitureSpot, ctx: PlannerContext): number {
+  let w = spot.weight;
+  if (spot.anim === 'rest') {
+    if (ctx.personality === 'lazy') w *= 2;
+    if (ctx.needs.energy < 35 || ctx.unwell) w *= 2;
+  }
+  if (spot.anim === 'scratch') {
+    if (ctx.personality === 'playful') w *= 2;
+    if (ctx.unwell) w = 0;
+  }
+  if (spot.anim === 'watchItem' && ctx.personality === 'curious') w *= 2;
+  if (spot.anim === 'watch' && ctx.unwell) w *= 0.3;
+  return w;
+}
+
 /** Picks the next autonomous behavior. */
 export function planBehavior(ctx: PlannerContext, rng: Rng = Math.random): Behavior {
   const weights = behaviorWeights(ctx);
-  const total = Object.values(weights).reduce((a, b) => a + b, 0);
+  const spots = (ctx.furniture ?? []).map((spot) => ({ spot, w: furnitureWeight(spot, ctx) }));
+  const total = Object.values(weights).reduce((a, b) => a + b, 0) + spots.reduce((a, s) => a + s.w, 0);
   let pick = rng() * total;
+  for (const { spot, w } of spots) {
+    pick -= w;
+    if (pick <= 0 && w > 0) {
+      return {
+        kind: 'furniture',
+        anim: spot.anim,
+        target: spot.target,
+        face: spot.face,
+        duration: between(rng, spot.duration[0], spot.duration[1]),
+        vocal: false,
+      };
+    }
+  }
   let kind: BehaviorKind = 'look';
   for (const [k, v] of Object.entries(weights) as [BehaviorKind, number][]) {
     pick -= v;

@@ -27,6 +27,7 @@ export function createEmptyGame(now: number, settings: Settings = defaultSetting
     inventory: { food: { ...STARTING_FOOD } },
     unlockedToys: [],
     settings: { ...settings },
+    comfort: 0,
     lastSimulatedAt: now,
   };
 }

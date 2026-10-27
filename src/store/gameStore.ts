@@ -6,6 +6,8 @@ import { ACTIVITY_DURATION_MS, BLOCKING_ACTIVITIES, TRICK_DURATION_MS } from '..
 import { getPersonality, randomPersonality } from '../config/personality';
 import { getTrick } from '../config/tricks';
 import { practiceTrick } from '../game/tricks';
+import { getDecor, type DecorKind } from '../config/decor';
+import { buyDecor, placeDecor, removeDecor, setTheme } from '../game/decor';
 import { getIllness } from '../config/illnesses';
 import { getToy } from '../config/items';
 import { NEEDS } from '../config/needs';
@@ -124,6 +126,8 @@ interface Store {
   minigame: MinigameState | null;
   /** Daily reward dialog is open. */
   dailyOpen: boolean;
+  /** Furniture being placed (the scene shows the free spots). */
+  decorPlacing: string | null;
 
   boot(): void;
   /** Adopts a pet and makes it active. Returns an error message on failure. */
@@ -146,6 +150,12 @@ interface Store {
   vitamins(): boolean;
   /** Practices (or shows off) a trick with the active pet. */
   practiceTrick(trickId: string): boolean;
+  buyDecor(id: string): boolean;
+  startPlacing(id: string): void;
+  cancelPlacing(): void;
+  placeDecor(slotId: string): void;
+  removeDecor(slotId: string): void;
+  setTheme(kind: Exclude<DecorKind, 'furniture'>, id: string): void;
 
   setTimeScale(value: number): void;
   setDevMode(on: boolean): void;
@@ -359,6 +369,7 @@ export const useGameStore = create<Store>()((set, get) => {
     grewTo: null,
     minigame: null,
     dailyOpen: false,
+    decorPlacing: null,
 
     boot() {
       // Guard against double invocation (React StrictMode runs effects twice in dev).
@@ -481,6 +492,52 @@ export const useGameStore = create<Store>()((set, get) => {
     treat: (kind) => runAction((g) => treatIllness(g, kind), { allowWhileBusy: true }),
     vitamins: () => runAction((g) => giveVitamins(g), { allowWhileBusy: true }),
     practiceTrick: (trickId) => runAction((g, at) => practiceTrick(g, trickId, at)),
+
+    buyDecor(id) {
+      const r = buyDecor(get().household, id);
+      if (!r.ok) {
+        pushToast(r.reason, 'bad');
+        playSound('refuse');
+        return false;
+      }
+      commit(r.household);
+      persist(r.household);
+      playSound('coin');
+      pushToast(t('toast.decorBought', { item: getDecor(id)?.name ?? id }), 'good');
+      return true;
+    },
+    startPlacing: (id) => set({ decorPlacing: id }),
+    cancelPlacing: () => set({ decorPlacing: null }),
+    placeDecor(slotId) {
+      const id = get().decorPlacing;
+      set({ decorPlacing: null });
+      if (!id) return;
+      const r = placeDecor(get().household, id, slotId);
+      if (!r.ok) {
+        pushToast(r.reason, 'bad');
+        return;
+      }
+      commit(r.household);
+      persist(r.household);
+      playSound('click');
+      pushToast(t('toast.decorPlaced', { item: getDecor(id)?.name ?? id }), 'info');
+    },
+    removeDecor(slotId) {
+      const next = removeDecor(get().household, slotId);
+      commit(next);
+      persist(next);
+      playSound('click');
+    },
+    setTheme(kind, id) {
+      const r = setTheme(get().household, kind, id);
+      if (!r.ok) {
+        pushToast(r.reason, 'bad');
+        return;
+      }
+      commit(r.household);
+      persist(r.household);
+      playSound('click');
+    },
 
     setTimeScale(value) {
       // Bring the simulation up to date with the old scale before switching.

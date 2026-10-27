@@ -283,7 +283,7 @@ export class RigAnimator {
     this.idleFor = isIdle && (!beh || beh === 'look') ? this.idleFor + dt : 0;
     let sitT = isIdle && this.idleFor > 7 && !i.unwell ? 1 : 0;
     let restT = 0;
-    if (beh === 'window' || beh === 'beg' || beh === 'watch' || beh === 'groom') sitT = 1;
+    if (beh === 'window' || beh === 'beg' || beh === 'watch' || beh === 'groom' || beh === 'watchItem') sitT = 1;
     if (beh === 'rest') restT = 1;
     if (trick === 'sit' || trick === 'paw' || trick === 'beg') sitT = smooth01(i.progress * 5);
     if (trick === 'down') restT = smooth01(i.progress * 4);
@@ -393,7 +393,9 @@ export class RigAnimator {
       this.lookTilt = r() < 0.25 ? (r() - 0.5) * 0.6 : 0;
       this.nextLook = t + 1.8 + r() * 3.5;
     }
-    const headBusy = beh === 'groom' || beh === 'sniff' || beh === 'window' || beh === 'chaseTail' || !!trick || act === 'confused';
+    const headBusy =
+      beh === 'groom' || beh === 'sniff' || beh === 'window' || beh === 'chaseTail' || beh === 'scratch' || beh === 'watchItem' ||
+      !!trick || act === 'confused';
     const lookW = (isIdle || act === 'petted' ? 1 : 0.25) * (1 - this.lieW) * (1 - this.walkW * 0.8) * (headBusy ? 0.2 : 1);
     const micro = Math.sin(t * 1.3) * 0.04;
     this.add('neck', this.lookPitch * 0.4, this.lookYaw * 0.4 + micro, 0, lookW);
@@ -633,6 +635,26 @@ export class RigAnimator {
         this.add('head', -0.25 * s, 0, 0);
         break;
       }
+      case 'scratch': {
+        // Stretch up the post and scratch with alternating front paws.
+        const s = Math.sin(t * 9);
+        this.add('pelvis', -0.75, 0, 0);
+        this.sym('hip', 0.55);
+        this.sym('knee', 0.3);
+        this.add('chest', -0.15, 0, 0);
+        this.add('shoulderL', -1.35 + 0.3 * s, 0, 0);
+        this.add('shoulderR', -1.35 - 0.3 * s, 0, 0);
+        this.sym('elbow', 0.25);
+        this.add('neck', 0.35, 0, 0);
+        this.add('head', 0.2, 0, 0);
+        this.add('pelvis', 0, 0.06 * Math.sin(t * 4.5), 0);
+        break;
+      }
+      case 'watchItem':
+        // Fascinated by the fish: head follows them, tail tip twitches.
+        this.add('neck', -0.1, 0.25 * Math.sin(t * 0.9), 0);
+        this.add('head', 0.05, 0.2 * Math.sin(t * 0.9 - 0.3), 0.1 * Math.sin(t * 0.45));
+        break;
       case 'rest':
         // Now and then rest the chin for a moment.
         this.add('neck', 0.3 * Math.max(0, Math.sin(t * 0.25)), 0, 0);

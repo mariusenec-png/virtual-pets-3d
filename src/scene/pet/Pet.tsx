@@ -19,6 +19,7 @@ import { ModelErrorBoundary } from './ModelErrorBoundary';
 import { PetModel } from './PetModel';
 import { PlaceholderPet } from './PlaceholderPet';
 import { planBehavior, type Behavior } from './behaviors';
+import { furnitureSpots, furnitureSurfaces } from '../decor/furnitureSpots';
 import { createPetMotion } from './motion';
 import { computePose, computeRiggedOuterPose, damp, dampAngle, NEUTRAL_POSE, type Pose } from './poses';
 import { useDirtTint } from './useDirtTint';
@@ -85,6 +86,9 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     spinFrom: 0,
     /** Current ground speed (m/s), for the gait. */
     speed: 0,
+    /** Clock time until which the pet is "jumping" onto/off a surface. */
+    hopUntil: -1,
+    floorTarget: 0,
   });
 
   const motion = useRef(createPetMotion(targetHeight)).current;
@@ -97,7 +101,7 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     const pg = posed.current;
     const sg = sized.current;
     if (!g || !pg || !sg) return;
-    const { game, activity } = useGameStore.getState();
+    const { game, activity, household } = useGameStore.getState();
     const pet = game.pet;
     if (!pet) return;
     const st = state.current;
@@ -137,6 +141,7 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
           needs: pet.needs,
           unwell: !!pet.illness || pet.needs.health < NEEDS.health.warnBelow,
           position: [st.pos.x, st.pos.z],
+          furniture: furnitureSpots(household.room, pet.species),
         });
         st.performStart = st.behavior.target ? -1 : time;
         if (!st.behavior.target && st.behavior.vocal) playSound(pet.species === 'cat' ? 'meow' : 'bark');
@@ -214,7 +219,8 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     };
     const sinceCatch = now - catchRuntime.lastCatchAt;
     const sinceHazard = now - catchRuntime.lastHazardAt;
-    const hop = mg && sinceCatch < 300 ? 1 - sinceCatch / 300 : 0;
+    const floorHop = st.hopUntil > three.clock.elapsedTime ? Math.sin(((st.hopUntil - three.clock.elapsedTime) / 0.4) * Math.PI) : 0;
+    const hop = mg && sinceCatch < 300 ? 1 - sinceCatch / 300 : Math.max(0, floorHop);
     const flinch = mg && sinceHazard < 500 ? 1 - sinceHazard / 500 : 0;
 
     // Inputs for the skeleton animator (PetModel).
@@ -254,9 +260,16 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     p.scaleY = damp(p.scaleY, targetPose.scaleY, lambda, dt);
     p.scaleXZ = damp(p.scaleXZ, targetPose.scaleXZ, lambda, dt);
 
-    // Step up onto the bed pad instead of sinking into it.
-    const onBed = Math.hypot(st.pos.x - BED.x, st.pos.z - BED.z) < BED_PAD_RADIUS;
-    st.floor = damp(st.floor, onBed ? BED_PAD_HEIGHT : 0, 10, dt);
+    // Step (or jump) up onto raised surfaces: the bed pad and furniture.
+    let floorTarget = Math.hypot(st.pos.x - BED.x, st.pos.z - BED.z) < BED_PAD_RADIUS ? BED_PAD_HEIGHT : 0;
+    if (!mg) {
+      for (const sfc of furnitureSurfaces(household.room)) {
+        if (Math.hypot(st.pos.x - sfc.x, st.pos.z - sfc.z) < sfc.radius) floorTarget = Math.max(floorTarget, sfc.height);
+      }
+    }
+    if (Math.abs(floorTarget - st.floorTarget) > 0.15) st.hopUntil = three.clock.elapsedTime + 0.4;
+    st.floorTarget = floorTarget;
+    st.floor = damp(st.floor, floorTarget, floorTarget - st.floor > 0.15 ? 7 : 10, dt);
     g.position.copy(st.pos);
     g.position.y = st.floor;
     g.rotation.y = st.heading;
