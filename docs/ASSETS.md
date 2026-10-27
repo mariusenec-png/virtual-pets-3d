@@ -49,6 +49,14 @@ low head and tail when ill). Dogs wag faster and wider the happier they are; cat
 when content and low when unhappy. This is procedural motion, not motion capture: it is fluid,
 but not as rich as hand-made animation clips.
 
+### Autonomous behavior (milestone 8)
+
+`src/scene/pet/behaviors.ts` picks what the pet does while idle (weights by species,
+personality, needs and health); `Pet.tsx` walks it there and the animator plays the matching
+overlay (window, watch, groom, sniff, toy, tail chase, rest, stretch, begging by the bowl). Tricks
+(`trick` / `confused` activities) have their own overlays; Roll over also rolls the whole model
+around the body center (`computeRiggedOuterPose`).
+
 ## Fur
 
 Fur is rendered in real time with **shell texturing** (`src/scene/fur/furShells.ts`): the body

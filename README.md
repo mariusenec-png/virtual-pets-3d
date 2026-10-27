@@ -131,7 +131,7 @@ Note: installing the app and offline mode need HTTPS (or `localhost`). Over the 
 `http://192.168…` address the game works on the phone, but cannot be installed there yet;
 that will work once the game is hosted on an HTTPS site.
 
-### Milestone 7 (this version)
+### Milestone 7
 
 - **More lifelike, fluid animals**: the models get an automatic skeleton when they load (21 bones
   with automatic skin weights, see `docs/ASSETS.md`), animated procedurally: a trot with real leg
@@ -145,6 +145,25 @@ that will work once the game is hosted on an HTTPS site.
 - **Coat markings**: the cat is a grey tabby with a pale belly and light paws; the dog has a
   darker back and a lighter belly.
 - Softer, more natural lighting (procedural environment light).
+
+### Milestone 8 (this version)
+
+- **A life of its own**: when you leave the pet alone it does things by itself: strolls around
+  the rug, sits under the window and looks out, comes to the front and watches you (cats give a
+  slow blink), grooms (cats lick a paw and wash the face), sniffs around (dogs), plays at the toy
+  basket (cats swipe at it, dogs play-bow), chases its tail (dogs), lies down to rest, stretches,
+  and sits by the bowl meowing or barking when hungry or thirsty. Purely visual: needs are not
+  changed by these behaviors. The choice depends on species, personality, needs and health.
+- **Personality** (random at adoption, shown in the pet card): Playful, Lazy, Curious, Foodie or
+  Cuddly. Mild effects: e.g. lazy pets tire more slowly but learn more slowly, curious ones learn
+  30% faster, cuddly ones love petting (+50% happiness), playful ones get more joy from toys.
+  Pets from older saves get a personality automatically.
+- **Tricks** (🎓 Tricks): Sit, Give paw, Lie down, Spin, Beg, Roll over, unlocking at levels 1–6.
+  Each try costs 4 energy and succeeds or fails depending on how well the trick is learned and how
+  happy the pet is; both teach something (success more). Successes give XP while learning;
+  mastering a trick (100%) pays 25 coins, and a mastered trick always works. Training is not
+  possible while asleep, sick, exhausted or very sad. Each trick has its own animation; a failed
+  try shows a puzzled pet.
 
 ## Publishing (GitHub Pages)
 

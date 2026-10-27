@@ -2,7 +2,10 @@ import { create } from 'zustand';
 import { playSound } from '../audio/engine';
 import { soundForEvent } from '../audio/soundMap';
 import { count, list, resolveLanguage, setLanguage, t, type LanguageSetting, type MessageKey } from '../i18n';
-import { ACTIVITY_DURATION_MS, BLOCKING_ACTIVITIES } from '../config/activities';
+import { ACTIVITY_DURATION_MS, BLOCKING_ACTIVITIES, TRICK_DURATION_MS } from '../config/activities';
+import { getPersonality, randomPersonality } from '../config/personality';
+import { getTrick } from '../config/tricks';
+import { practiceTrick } from '../game/tricks';
 import { getIllness } from '../config/illnesses';
 import { getToy } from '../config/items';
 import { NEEDS } from '../config/needs';
@@ -141,6 +144,8 @@ interface Store {
   buyFood(foodId: string): void;
   treat(kind: TreatmentKind): boolean;
   vitamins(): boolean;
+  /** Practices (or shows off) a trick with the active pet. */
+  practiceTrick(trickId: string): boolean;
 
   setTimeScale(value: number): void;
   setDevMode(on: boolean): void;
@@ -201,7 +206,8 @@ export const useGameStore = create<Store>()((set, get) => {
 
   function startActivity(kind: ActivityKind, itemId?: string) {
     activitySeq += 1;
-    set({ activity: { kind, itemId, startedAt: now(), durationMs: ACTIVITY_DURATION_MS[kind], seq: activitySeq } });
+    const durationMs = (kind === 'trick' && itemId && TRICK_DURATION_MS[itemId]) || ACTIVITY_DURATION_MS[kind];
+    set({ activity: { kind, itemId, startedAt: now(), durationMs, seq: activitySeq } });
   }
 
   function persist(household: Household) {
@@ -297,6 +303,12 @@ export const useGameStore = create<Store>()((set, get) => {
         case 'cured': {
           const ill = getIllness(e.illnessId);
           pushToast(t('toast.cured', { name: pet?.name ?? '', illness: ill?.name ?? '?', treatment: e.treatment }), 'good');
+          break;
+        }
+        case 'trickMastered': {
+          const trick = getTrick(e.trickId);
+          pushFx('levelUp', `${trick?.icon ?? '🏆'} ${trick?.name ?? ''}`);
+          pushToast(t('toast.trickMastered', { name: pet?.name ?? '', trick: trick?.name ?? '', coins: e.coins }), 'good');
           break;
         }
         case 'coins':
@@ -401,7 +413,7 @@ export const useGameStore = create<Store>()((set, get) => {
       const at = now();
       // Bring everyone up to date before adding a new pet.
       const caught = advanceHousehold(get().household, at, { offline: false });
-      const r = adoptPet(caught.household, name, species, at);
+      const r = adoptPet(caught.household, name, species, at, randomPersonality());
       if (!r.ok) return r.reason;
       commit(r.household);
       resetPresentation();
@@ -409,6 +421,15 @@ export const useGameStore = create<Store>()((set, get) => {
       persist(r.household);
       playSound('adopt');
       pushToast(t('toast.welcome', { name: r.pet.name, icon: getSpecies(species).icon }), 'good');
+      const personality = getPersonality(r.pet.personality);
+      pushToast(
+        t('toast.personality', {
+          name: r.pet.name,
+          personality: `${personality.icon} ${personality.name.toLocaleLowerCase()}`,
+          desc: personality.description,
+        }),
+        'info',
+      );
       return null;
     },
 
@@ -459,6 +480,7 @@ export const useGameStore = create<Store>()((set, get) => {
     buyFood: (foodId) => void runAction((g) => actions.buyFood(g, foodId), { allowWhileBusy: true }),
     treat: (kind) => runAction((g) => treatIllness(g, kind), { allowWhileBusy: true }),
     vitamins: () => runAction((g) => giveVitamins(g), { allowWhileBusy: true }),
+    practiceTrick: (trickId) => runAction((g, at) => practiceTrick(g, trickId, at)),
 
     setTimeScale(value) {
       // Bring the simulation up to date with the old scale before switching.

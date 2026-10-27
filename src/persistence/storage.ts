@@ -1,4 +1,6 @@
 import { getIllness } from '../config/illnesses';
+import { isPersonalityId, personalityFromId } from '../config/personality';
+import { TRICKS } from '../config/tricks';
 import { FOODS } from '../config/items';
 import { MAX_LEVEL } from '../config/progression';
 import { SIMULATION } from '../config/simulation';
@@ -15,7 +17,11 @@ import { isSpeciesId } from '../species/registry';
  */
 
 export const SAVE_KEY = 'virtual-pets-3d/save';
-/** v1: single pet ({ game }). v2: multi-pet household ({ household }). */
+/**
+ * v1: single pet ({ game }). v2: multi-pet household ({ household }).
+ * Milestone 8 added optional pet fields (personality, tricks) without a
+ * version bump: older v2 saves get defaults when loaded.
+ */
 export const SAVE_VERSION = 2;
 
 /** Minimal key-value interface so tests (and a future mobile build) can swap storage. */
@@ -111,8 +117,16 @@ function sanitizePet(raw: unknown, now: number, track: { repaired: boolean }): P
       : null;
   if (illRaw && !illness) track.repaired = true;
 
+  const id = typeof r.id === 'string' && r.id.length > 0 ? r.id : `pet-${now}`;
+  // Fields added in milestone 8: older saves simply lack them (not a repair).
+  const tricksRaw = (r.tricks && typeof r.tricks === 'object' ? r.tricks : {}) as Record<string, unknown>;
+  const tricks: PetState['tricks'] = {};
+  for (const trick of TRICKS) {
+    if (isFiniteNumber(tricksRaw[trick.id])) tricks[trick.id] = clamp(tricksRaw[trick.id] as number, 0, 100);
+  }
+
   return {
-    id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `pet-${now}`,
+    id,
     name,
     species: r.species,
     createdAt: num(r.createdAt, now, 0, now + SIMULATION.maxClockSkewMs, track),
@@ -137,7 +151,10 @@ function sanitizePet(raw: unknown, now: number, track: { repaired: boolean }): P
       vetVisits: stat('vetVisits'),
       minigames: stat('minigames'),
       bestCatch: stat('bestCatch'),
+      tricks: isFiniteNumber(statsRaw.tricks) ? Math.floor(clamp(statsRaw.tricks, 0, 1e9)) : 0,
     },
+    personality: isPersonalityId(r.personality) ? r.personality : personalityFromId(id),
+    tricks,
     xpReadyAt,
   };
 }

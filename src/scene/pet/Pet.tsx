@@ -4,6 +4,7 @@ import { Suspense, useRef } from 'react';
 import * as THREE from 'three';
 import { ROOM_LAYOUT } from '../../config/activities';
 import { NEEDS } from '../../config/needs';
+import { playSound } from '../../audio/engine';
 import { getGrowthStage } from '../../game/progression';
 import type { SpeciesId } from '../../game/types';
 import { getSpecies } from '../../species/registry';
@@ -17,12 +18,17 @@ import { SymptomBubble } from '../effects/SymptomBubble';
 import { ModelErrorBoundary } from './ModelErrorBoundary';
 import { PetModel } from './PetModel';
 import { PlaceholderPet } from './PlaceholderPet';
+import { planBehavior, type Behavior } from './behaviors';
 import { createPetMotion } from './motion';
 import { computePose, computeRiggedOuterPose, damp, dampAngle, NEUTRAL_POSE, type Pose } from './poses';
 import { useDirtTint } from './useDirtTint';
 import { t } from '../../i18n';
 
 const WALK_SPEED = 0.9; // m/s
+/** Strolling speed for autonomous behaviors. */
+const STROLL_SPEED = 0.55;
+/** Seconds of calm after any activity before the pet does things on its own. */
+const CALM_AFTER_ACTIVITY = 4;
 const ARRIVE_EPS = 0.02;
 /** Top of the bed's inner pad and its radius (see props/PetBed.tsx). */
 const BED_PAD_HEIGHT = 0.08;
@@ -67,6 +73,18 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     proportions: [...appearance.proportions] as [number, number, number],
     /** Height of whatever the pet stands on (the bed pad is raised). */
     floor: 0,
+    /** Autonomous behavior in progress (null = plain idle). */
+    behavior: null as Behavior | null,
+    /** Clock time when the behavior started performing (-1 = still walking there). */
+    performStart: -1,
+    /** Clock time before which no new behavior starts. */
+    nextBehaviorAt: 3,
+    /** Activity sequence seen last frame (detects new activities). */
+    lastSeq: -1,
+    /** Heading when a spin started. */
+    spinFrom: 0,
+    /** Current ground speed (m/s), for the gait. */
+    speed: 0,
   });
 
   const motion = useRef(createPetMotion(targetHeight)).current;
@@ -102,9 +120,37 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
       const desired = walking ? (mg.petVelocity > 0 ? Math.PI / 2 : -Math.PI / 2) : 0;
       st.heading = dampAngle(st.heading, desired, 12, dt);
     } else {
+      const time = three.clock.elapsedTime;
+      // New activity: remember where a spin starts.
+      if (active && active.seq !== st.lastSeq) st.spinFrom = st.heading;
+      st.lastSeq = active?.seq ?? st.lastSeq;
+
+      // Autonomous behavior only while nothing else is going on.
+      const idle = !active && !sleeping;
+      if (!idle) {
+        st.behavior = null;
+        st.nextBehaviorAt = time + CALM_AFTER_ACTIVITY;
+      } else if (!st.behavior && time >= st.nextBehaviorAt) {
+        st.behavior = planBehavior({
+          species: pet.species,
+          personality: pet.personality,
+          needs: pet.needs,
+          unwell: !!pet.illness || pet.needs.health < NEEDS.health.warnBelow,
+          position: [st.pos.x, st.pos.z],
+        });
+        st.performStart = st.behavior.target ? -1 : time;
+        if (!st.behavior.target && st.behavior.vocal) playSound(pet.species === 'cat' ? 'meow' : 'bark');
+      }
+      const beh = st.behavior;
+      if (beh && st.performStart >= 0 && time > st.performStart + beh.duration) {
+        st.behavior = null;
+        st.nextBehaviorAt = time + 2.5 + Math.random() * 3.5;
+      }
+
       // Where should the pet be?
-      let target = HOME;
+      let target = st.pos;
       let face: THREE.Vector3 | null = CAMERA_DIR;
+      let speed = WALK_SPEED;
       // Rigged pets lower their head into the bowl, so they stand closer.
       const reach = motion.rigged ? Math.max(0, st.height * 0.5 - 0.1) : st.height * 0.75;
       if (active?.kind === 'eat') {
@@ -118,8 +164,11 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
         face = CAMERA_DIR;
       } else if (active?.kind === 'bath') {
         target = BATH;
-      } else if (active?.kind === 'wake') {
-        target = st.pos; // stretch in place before walking home
+      } else if (st.behavior) {
+        const b = st.behavior;
+        if (b.target && st.performStart < 0) target = new THREE.Vector3(b.target[0], 0, b.target[1]);
+        face = b.face === 'camera' ? CAMERA_DIR : b.face ? new THREE.Vector3(b.face[0], 0, b.face[1]) : null;
+        speed = STROLL_SPEED;
       }
 
       // Move.
@@ -127,20 +176,36 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
       const dist = toTarget.length();
       walking = dist > ARRIVE_EPS;
       if (walking) {
-        const step = Math.min(dist, WALK_SPEED * dt);
+        const step = Math.min(dist, speed * dt);
         st.pos.addScaledVector(toTarget.normalize(), step);
         st.heading = dampAngle(st.heading, Math.atan2(toTarget.x, toTarget.z), 10, dt);
-      } else if (face) {
-        const fx = face.x - st.pos.x;
-        const fz = face.z - st.pos.z;
-        st.heading = dampAngle(st.heading, Math.atan2(fx, fz), 5, dt);
+      } else {
+        // Arrived at the behavior spot: start performing.
+        const b = st.behavior;
+        if (b && st.performStart < 0) {
+          st.performStart = time;
+          if (b.vocal) playSound(pet.species === 'cat' ? 'meow' : 'bark');
+        }
+        if (active?.kind === 'trick' && active.itemId === 'spin') {
+          // One full turn over the trick, eased in and out.
+          const u = THREE.MathUtils.smoothstep(progress, 0.08, 0.9);
+          st.heading = st.spinFrom + u * Math.PI * 2;
+        } else if (b?.anim === 'chaseTail' && st.performStart >= 0) {
+          st.heading += 4.2 * dt;
+        } else if (face) {
+          const fx = face.x - st.pos.x;
+          const fz = face.z - st.pos.z;
+          st.heading = dampAngle(st.heading, Math.atan2(fx, fz), 5, dt);
+        }
       }
+      st.speed = walking ? speed : 0;
     }
 
     // Pose.
     const poseInput = {
       time: three.clock.elapsedTime,
       activity: mg ? null : (active?.kind ?? null),
+      itemId: mg ? null : (active?.itemId ?? null),
       progress,
       arrived: !walking,
       walking,
@@ -155,7 +220,16 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     // Inputs for the skeleton animator (PetModel).
     const mi = motion.input;
     mi.time = poseInput.time;
-    mi.speed = walking ? (mg ? Math.abs(mg.petVelocity) : WALK_SPEED) : 0;
+    mi.speed = walking ? (mg ? Math.abs(mg.petVelocity) : st.speed) : 0;
+    const beh = !mg ? st.behavior : null;
+    const performing = !!beh && st.performStart >= 0;
+    mi.behavior = performing ? beh!.anim : null;
+    mi.behaviorProgress = performing ? Math.min(1, (poseInput.time - st.performStart) / beh!.duration) : 0;
+    mi.itemId = poseInput.itemId;
+    // Trotting on the spot while spinning or chasing the tail.
+    mi.spinning =
+      (poseInput.activity === 'trick' && poseInput.itemId === 'spin' && progress > 0.08 && progress < 0.9) ||
+      (performing && beh!.anim === 'chaseTail');
     mi.height = st.height;
     mi.activity = poseInput.activity;
     mi.progress = progress;
@@ -174,7 +248,8 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     const lambda = 14;
     p.lift = damp(p.lift, targetPose.lift, lambda, dt);
     p.pitch = damp(p.pitch, targetPose.pitch, lambda, dt);
-    p.roll = damp(p.roll, targetPose.roll, lambda, dt);
+    p.roll = dampAngle(p.roll, targetPose.roll, lambda, dt);
+    p.side = damp(p.side, targetPose.side, lambda, dt);
     p.yaw = dampAngle(p.yaw, targetPose.yaw, lambda, dt);
     p.scaleY = damp(p.scaleY, targetPose.scaleY, lambda, dt);
     p.scaleXZ = damp(p.scaleXZ, targetPose.scaleXZ, lambda, dt);
@@ -186,6 +261,7 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     g.position.y = st.floor;
     g.rotation.y = st.heading;
     pg.position.y = p.lift * st.height;
+    pg.position.x = p.side * st.height;
     pg.rotation.set(p.pitch, p.yaw, p.roll);
     pg.scale.set(p.scaleXZ, p.scaleY, p.scaleXZ);
   });

@@ -1,4 +1,5 @@
 import { getIllness, ILLNESSES, type IllnessDefinition } from '../config/illnesses';
+import { getPersonality, type PersonalityDef } from '../config/personality';
 import { DECAY, GOOD_CARE_THRESHOLD, NEEDS } from '../config/needs';
 import { GOOD_CARE_XP_PER_HOUR } from '../config/progression';
 import { SIMULATION } from '../config/simulation';
@@ -24,8 +25,13 @@ export function cloneState(state: GameState): GameState {
   return structuredClone(state);
 }
 
-function mult(species: SpeciesDefinition, illness: IllnessDefinition | undefined, need: NeedId): number {
-  return (species.decayMultipliers[need] ?? 1) * (illness?.decayMultipliers[need] ?? 1);
+function mult(
+  species: SpeciesDefinition,
+  illness: IllnessDefinition | undefined,
+  personality: PersonalityDef,
+  need: NeedId,
+): number {
+  return (species.decayMultipliers[need] ?? 1) * (illness?.decayMultipliers[need] ?? 1) * (personality.decay[need] ?? 1);
 }
 
 /** Total illness rate per hour and each illness's share, given current needs. */
@@ -73,16 +79,17 @@ function stepPet(
   const asleep = pet.isSleeping;
   const sleepM = DECAY.asleepMultiplier;
   const illness = pet.illness ? getIllness(pet.illness.id) : undefined;
+  const personality = getPersonality(pet.personality);
 
-  n.satiety -= DECAY.awake.satiety * mult(species, illness, 'satiety') * (asleep ? sleepM.satiety : 1) * dt;
-  n.hydration -= DECAY.awake.hydration * mult(species, illness, 'hydration') * (asleep ? sleepM.hydration : 1) * dt;
-  n.hygiene -= DECAY.awake.hygiene * mult(species, illness, 'hygiene') * (asleep ? sleepM.hygiene : 1) * dt;
-  n.happiness -= DECAY.awake.happiness * mult(species, illness, 'happiness') * (asleep ? sleepM.happiness : 1) * dt;
+  n.satiety -= DECAY.awake.satiety * mult(species, illness, personality, 'satiety') * (asleep ? sleepM.satiety : 1) * dt;
+  n.hydration -= DECAY.awake.hydration * mult(species, illness, personality, 'hydration') * (asleep ? sleepM.hydration : 1) * dt;
+  n.hygiene -= DECAY.awake.hygiene * mult(species, illness, personality, 'hygiene') * (asleep ? sleepM.hygiene : 1) * dt;
+  n.happiness -= DECAY.awake.happiness * mult(species, illness, personality, 'happiness') * (asleep ? sleepM.happiness : 1) * dt;
 
   if (asleep) {
     n.energy += DECAY.sleepEnergyGain * dt;
   } else {
-    n.energy -= DECAY.awake.energy * mult(species, illness, 'energy') * dt;
+    n.energy -= DECAY.awake.energy * mult(species, illness, personality, 'energy') * dt;
   }
 
   // Unmet needs make the pet unhappy and, when critical, unhealthy.

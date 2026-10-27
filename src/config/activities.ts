@@ -14,6 +14,15 @@ export const ACTIVITY_DURATION_MS: Record<ActivityKind, number> = {
   wake: 1400,
   celebrate: 2200,
   refuse: 1200,
+  trick: 2800,
+  confused: 2000,
+};
+
+/** Some tricks take longer to perform than the default `trick` duration. */
+export const TRICK_DURATION_MS: Partial<Record<string, number>> = {
+  spin: 2400,
+  rollOver: 3600,
+  beg: 3000,
 };
 
 export const BLOCKING_ACTIVITIES: ReadonlySet<ActivityKind> = new Set<ActivityKind>([
@@ -23,6 +32,8 @@ export const BLOCKING_ACTIVITIES: ReadonlySet<ActivityKind> = new Set<ActivityKi
   'bath',
   'sleep',
   'wake',
+  'trick',
+  'confused',
 ]);
 
 /** Scene layout (world units, meters). Pet "home" is the origin. */
@@ -33,4 +44,6 @@ export const ROOM_LAYOUT = {
   bed: [1.05, 0, -0.45] as [number, number, number],
   bathSpot: [0, 0, 0.35] as [number, number, number],
   toyBasket: [1.25, 0, 0.75] as [number, number, number],
+  /** Floor spot under the window, where pets like to sit and look out. */
+  window: [-0.55, 0, -1.75] as [number, number, number],
 };

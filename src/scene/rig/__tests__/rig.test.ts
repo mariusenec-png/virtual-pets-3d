@@ -74,14 +74,28 @@ describe('auto-rig', () => {
     const activities: RigAnimInput['activity'][] = [
       null, 'eat', 'drink', 'play', 'petted', 'bath', 'sleep', 'wake', 'celebrate', 'refuse',
     ];
-    for (const activity of activities) {
+    const cases: [RigAnimInput['activity'], string | null, RigAnimInput['behavior']][] = [
+      ...activities.map((a) => [a, null, null] as [RigAnimInput['activity'], string | null, RigAnimInput['behavior']]),
+      ...['sit', 'paw', 'down', 'spin', 'beg', 'rollOver'].map(
+        (id) => ['trick', id, null] as [RigAnimInput['activity'], string | null, RigAnimInput['behavior']],
+      ),
+      ['confused', 'paw', null],
+      ...(['look', 'window', 'beg', 'watch', 'groom', 'sniff', 'toy', 'chaseTail', 'rest', 'stretch'] as const).map(
+        (b) => [null, null, b] as [RigAnimInput['activity'], string | null, RigAnimInput['behavior']],
+      ),
+    ];
+    for (const [activity, itemId, behavior] of cases) {
       for (let k = 0; k < 120; k++) {
         anim.update(
           {
             time: k / 30,
-            speed: activity === null && k < 60 ? 0.9 : 0,
+            speed: activity === null && !behavior && k < 60 ? 0.9 : 0,
             height: 0.6,
             activity,
+            itemId,
+            behavior,
+            behaviorProgress: k / 120,
+            spinning: behavior === 'chaseTail' || itemId === 'spin',
             progress: k / 120,
             arrived: true,
             sleeping: activity === 'sleep' && k > 100,

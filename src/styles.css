@@ -449,6 +449,8 @@ button:disabled {
 
 .tray {
   width: min(400px, calc(100vw - 32px));
+  max-height: 62vh;
+  overflow-y: auto;
   background: var(--panel-solid);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -510,6 +512,43 @@ button:disabled {
 }
 .tray-count.empty {
   color: var(--bad);
+}
+
+.tray-hint {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 6px 4px;
+}
+.tray-cta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.mastery {
+  display: block;
+  height: 5px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #eadfd3;
+  overflow: hidden;
+}
+.mastery-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #e0a458;
+  transition: width 0.4s ease;
+}
+.mastery-fill.good {
+  background: #6aa86b;
+}
+.mastery-fill.mastered {
+  background: linear-gradient(90deg, #e9b949, #f3d36b);
+}
+.personality {
+  white-space: nowrap;
+  cursor: help;
 }
 
 /* ---------- Toasts ---------- */
@@ -1322,7 +1361,11 @@ kbd {
     font-size: 21px;
   }
   .action-label {
-    font-size: 11px;
+    font-size: 10px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .toasts {
     top: auto;

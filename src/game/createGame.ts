@@ -4,7 +4,7 @@ import { STARTING_COINS } from '../config/progression';
 import { DEFAULT_TIME_SCALE } from '../config/simulation';
 import { getSpecies } from '../species/registry';
 import { unlockedToysForLevel } from './progression';
-import type { GameState, PetState, Settings, SpeciesId } from './types';
+import type { GameState, PersonalityId, PetState, Settings, SpeciesId } from './types';
 import { isMobileDevice } from '../config/device';
 
 export const MAX_NAME_LENGTH = 16;
@@ -49,7 +49,16 @@ function makeId(): string {
   return `pet-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function createPet(name: string, species: SpeciesId, now: number): PetState {
+/**
+ * Creates a fresh pet. The personality defaults to 'curious' (no effect on
+ * needs) so tests stay deterministic; adoption in the game picks a random one.
+ */
+export function createPet(
+  name: string,
+  species: SpeciesId,
+  now: number,
+  personality: PersonalityId = 'curious',
+): PetState {
   return {
     id: makeId(),
     name,
@@ -72,7 +81,9 @@ export function createPet(name: string, species: SpeciesId, now: number): PetSta
     immuneUntilAgeHours: VET.newPetImmunityHours,
     goodCareHours: 0,
     pendingCareXp: 0,
-    stats: { feeds: 0, drinks: 0, plays: 0, pets: 0, baths: 0, sleeps: 0, vetVisits: 0, minigames: 0, bestCatch: 0 },
+    stats: { feeds: 0, drinks: 0, plays: 0, pets: 0, baths: 0, sleeps: 0, vetVisits: 0, minigames: 0, bestCatch: 0, tricks: 0 },
+    personality,
+    tricks: {},
     xpReadyAt: {},
   };
 }

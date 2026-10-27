@@ -51,6 +51,8 @@ export function soundForEvent(event: GameEvent, species: SpeciesId): SoundId | n
           return 'wake';
         case 'refuse':
           return 'refuse';
+        case 'trick':
+          return species === 'cat' ? 'meow' : 'happyDog';
         default:
           return null;
       }
@@ -64,6 +66,8 @@ export function soundForEvent(event: GameEvent, species: SpeciesId): SoundId | n
       return 'sneeze';
     case 'cured':
       return 'cured';
+    case 'trickMastered':
+      return 'levelUp';
     case 'warning':
       return 'warning';
     case 'fellAsleep':

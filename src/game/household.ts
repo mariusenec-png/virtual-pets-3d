@@ -6,7 +6,7 @@ import { createPet, defaultSettings, sanitizePetName } from './createGame';
 import { clamp, MS_PER_HOUR } from './math';
 import { unlockedToysForLevel } from './progression';
 import { simulateHours, type SimulateOptions } from './simulation';
-import type { GameState, Household, PetEvent, PetState, Settings, SpeciesId } from './types';
+import type { GameState, Household, PersonalityId, PetEvent, PetState, Settings, SpeciesId } from './types';
 import { t } from '../i18n';
 
 /**
@@ -64,7 +64,13 @@ export function unfocus(h: Household, view: GameState): Household {
 
 export type AdoptResult = { ok: true; household: Household; pet: PetState } | { ok: false; reason: string };
 
-export function adoptPet(h: Household, rawName: string, species: SpeciesId, now: number): AdoptResult {
+export function adoptPet(
+  h: Household,
+  rawName: string,
+  species: SpeciesId,
+  now: number,
+  personality?: PersonalityId,
+): AdoptResult {
   const name = sanitizePetName(rawName);
   if (!name) return { ok: false, reason: t('adopt.errName') };
   if (!getSpecies(species).available) return { ok: false, reason: t('adopt.errSpecies') };
@@ -72,7 +78,7 @@ export function adoptPet(h: Household, rawName: string, species: SpeciesId, now:
   if (h.pets.some((p) => p.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
     return { ok: false, reason: t('adopt.errDuplicate', { name }) };
   }
-  const pet = createPet(name, species, now);
+  const pet = createPet(name, species, now, personality);
   return { ok: true, pet, household: { ...h, pets: [...h.pets, pet], activePetId: pet.id } };
 }
 

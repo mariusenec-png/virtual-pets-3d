@@ -18,15 +18,19 @@ export interface Pose {
   yaw: number;
   scaleY: number;
   scaleXZ: number;
+  /** Sideways offset (fraction of pet height), used to roll around the body center. */
+  side: number;
 }
 
-export const NEUTRAL_POSE: Pose = { lift: 0, pitch: 0, roll: 0, yaw: 0, scaleY: 1, scaleXZ: 1 };
+export const NEUTRAL_POSE: Pose = { lift: 0, pitch: 0, roll: 0, yaw: 0, scaleY: 1, scaleXZ: 1, side: 0 };
 
 export interface PoseInput {
   /** Seconds, continuously increasing. */
   time: number;
   /** Current activity, if any, and its 0..1 progress. */
   activity: ActivityKind | null;
+  /** Item of the activity (trick id for tricks). */
+  itemId?: string | null;
   progress: number;
   /** Whether the pet has reached its activity spot. */
   arrived: boolean;
@@ -130,6 +134,18 @@ export function computeRiggedOuterPose(i: PoseInput): Pose {
     case 'celebrate':
       pose.lift = Math.abs(Math.sin(i.progress * Math.PI * 3)) * 0.35;
       pose.yaw = i.progress * Math.PI * 2;
+      break;
+    case 'trick':
+      if (i.itemId === 'rollOver') {
+        // Roll around the body's long axis, pivoting at the body center
+        // (about a fifth of the height above the floor while lying).
+        const u = Math.min(1, Math.max(0, (i.progress - 0.25) / 0.55));
+        const theta = (u * u * (3 - 2 * u)) * Math.PI * 2;
+        const c = 0.2;
+        pose.roll = theta;
+        pose.side = c * Math.sin(theta);
+        pose.lift = c * (1 - Math.cos(theta));
+      }
       break;
     default:
       break;

@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { FOODS, toysForSpecies } from '../config/items';
+import { getPersonality } from '../config/personality';
+import { TRAINING, TRICKS, trickLevel } from '../config/tricks';
+import { trickSuccessChance } from '../game/tricks';
+import type { MessageKey } from '../i18n';
 import { useGameStore } from '../store/gameStore';
 import { useIsBusy } from './hooks';
 import { t } from '../i18n';
 
-type Tray = 'food' | 'toys' | null;
+type Tray = 'food' | 'toys' | 'tricks' | null;
 
 export function ActionBar({ onOpenVet }: { onOpenVet: () => void }) {
   const pet = useGameStore((s) => s.game.pet);
@@ -121,11 +125,67 @@ export function ActionBar({ onOpenVet }: { onOpenVet: () => void }) {
         </div>
       )}
 
+      {tray === 'tricks' && (
+        <div className="tray" role="menu" aria-label={t('tricks.title')}>
+          <div className="tray-title">
+            {t('tricks.title')}{' '}
+            <span className="muted">
+              ·{' '}
+              {t('tricks.learnSpeed', {
+                personality: `${getPersonality(pet.personality).icon} ${getPersonality(pet.personality).name}`,
+                n: getPersonality(pet.personality).learning,
+              })}
+            </span>
+          </div>
+          <div className="tray-hint">{t('tricks.hint', { energy: TRAINING.energyCost })}</div>
+          {TRICKS.map((trick) => {
+            const locked = pet.level < trick.unlockLevel;
+            const mastery = pet.tricks[trick.id] ?? 0;
+            const level = trickLevel(mastery);
+            const chance = Math.round(trickSuccessChance(pet, trick.id) * 100);
+            return (
+              <div key={trick.id} className="tray-item">
+                <button
+                  className="tray-main"
+                  disabled={awakeOnly || locked}
+                  onClick={() => {
+                    store.practiceTrick(trick.id);
+                    setTray(null);
+                  }}
+                >
+                  <span className="tray-icon">{locked ? '🔒' : trick.icon}</span>
+                  <span className="tray-text">
+                    <strong>{trick.name}</strong>
+                    {locked ? (
+                      <small>{t('tricks.locked', { level: trick.unlockLevel })}</small>
+                    ) : (
+                      <>
+                        <small>
+                          {t(`tricks.level.${level}` as MessageKey)}
+                          {level !== 'mastered' ? ` · ${t('tricks.chance', { n: chance })}` : ''}
+                        </small>
+                        <span className="mastery" aria-hidden>
+                          <span className={`mastery-fill ${level}`} style={{ width: `${mastery}%` }} />
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  {!locked && (
+                    <span className="tray-cta">{level === 'mastered' ? t('tricks.show') : t('tricks.practice')}</span>
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <nav className="actionbar" aria-label={t('actions.label')}>
         <ActionButton icon="🍖" label={t('action.feed')} active={tray === 'food'} disabled={awakeOnly} onClick={() => setTray(tray === 'food' ? null : 'food')} />
         <ActionButton icon="💧" label={t('action.water')} disabled={awakeOnly} onClick={() => store.water()} />
         <ActionButton icon="🎾" label={t('action.play')} active={tray === 'toys'} disabled={awakeOnly} onClick={() => setTray(tray === 'toys' ? null : 'toys')} />
         <ActionButton icon="🤚" label={t('action.pet')} disabled={false} onClick={() => store.pet()} />
+        <ActionButton icon="🎓" label={t('action.tricks')} active={tray === 'tricks'} disabled={awakeOnly} onClick={() => setTray(tray === 'tricks' ? null : 'tricks')} />
         <ActionButton icon="🛁" label={t('action.bath')} disabled={awakeOnly} onClick={() => store.bathe()} />
         {asleep ? (
           <ActionButton icon="☀️" label={t('action.wake')} disabled={busy} onClick={() => store.wake()} />

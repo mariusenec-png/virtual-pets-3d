@@ -2,6 +2,7 @@ import { xpToNextLevel } from '../config/progression';
 import { TIME_SCALE_PRESETS } from '../config/simulation';
 import { getMood } from '../game/mood';
 import { getIllness } from '../config/illnesses';
+import { getPersonality } from '../config/personality';
 import { dailyStatus } from '../game/daily';
 import { getGrowthStageDefinition, levelProgress, nextStageRequirements } from '../game/progression';
 import { getSpecies } from '../species/registry';
@@ -26,6 +27,7 @@ export function PetCard({ onOpenVet }: { onOpenVet: () => void }) {
   const progress = levelProgress(pet);
   const illness = pet.illness ? getIllness(pet.illness.id) : undefined;
   const next = nextStageRequirements(pet);
+  const personality = getPersonality(pet.personality);
   return (
     <section className="panel petcard" aria-label={t('card.label')}>
       <div className="petcard-top">
@@ -36,6 +38,10 @@ export function PetCard({ onOpenVet }: { onOpenVet: () => void }) {
           <h2>{pet.name}</h2>
           <div className="petcard-sub">
             {t('card.sub', { stage: stage.label, species: species.name.toLowerCase(), age: formatAge(pet.ageHours) })}
+            {' · '}
+            <span className="personality" title={`${t('personality.label')}: ${personality.description}`}>
+              {personality.icon} {personality.name}
+            </span>
           </div>
         </div>
         <span className={`mood mood-${mood.id}`} title={t('card.mood')}>

@@ -11,6 +11,7 @@ import {
   XP_NEEDED_BELOW,
 } from '../config/items';
 import { getIllness } from '../config/illnesses';
+import { getPersonality } from '../config/personality';
 import { ACTION_XP, ACTION_XP_COOLDOWN_MS } from '../config/progression';
 import { getSpecies } from '../species/registry';
 import { clampNeed } from './math';
@@ -34,6 +35,12 @@ function applyEffects(pet: PetState, effects: Partial<Record<NeedId, number>>): 
   for (const [id, delta] of Object.entries(effects) as [NeedId, number][]) {
     pet.needs[id] = clampNeed(pet.needs[id] + delta);
   }
+}
+
+/** Multiplies the happiness part of an effect (personality bonuses). */
+function scaleJoy(effects: Partial<Record<NeedId, number>>, factor: number): Partial<Record<NeedId, number>> {
+  if (factor === 1 || effects.happiness === undefined) return effects;
+  return { ...effects, happiness: Math.round(effects.happiness * factor) };
 }
 
 /** Grants action XP when the action was needed and is off cooldown. */
@@ -112,7 +119,7 @@ export function play(state: GameState, toyId: string, now: number): ActionResult
 
   const next = cloneState(state);
   const pet = next.pet!;
-  applyEffects(pet, toy.effects);
+  applyEffects(pet, scaleJoy(toy.effects, getPersonality(pet.personality).playJoy));
   pet.stats.plays += 1;
   const events: GameEvent[] = [{ type: 'activity', activity: 'play', itemId: toyId }];
   // Playing is always "needed" as long as the pet is not overjoyed already.
@@ -125,7 +132,8 @@ export function petAnimal(state: GameState, now: number): ActionResult {
   const next = cloneState(state);
   const pet = next.pet!;
   const gentle = pet.isSleeping;
-  applyEffects(pet, gentle ? { happiness: PET_EFFECTS.happiness! / 2 } : PET_EFFECTS);
+  const joy = getPersonality(pet.personality).pettingJoy;
+  applyEffects(pet, scaleJoy(gentle ? { happiness: PET_EFFECTS.happiness! / 2 } : PET_EFFECTS, joy));
   pet.stats.pets += 1;
   const events: GameEvent[] = [{ type: 'activity', activity: 'petted' }];
   events.push(...grantActionXp(next, 'pet', now, true));

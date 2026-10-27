@@ -17,6 +17,12 @@ export type GrowthStage = 'baby' | 'young' | 'adult';
 
 export type ActionId = 'feed' | 'water' | 'play' | 'pet' | 'bathe' | 'sleep' | 'wake';
 
+/** Tricks a pet can learn (see src/config/tricks.ts). */
+export type TrickId = 'sit' | 'paw' | 'down' | 'spin' | 'beg' | 'rollOver';
+
+/** Personality, assigned at adoption (see src/config/personality.ts). */
+export type PersonalityId = 'playful' | 'lazy' | 'curious' | 'foodie' | 'cuddly';
+
 export interface CareStats {
   feeds: number;
   drinks: number;
@@ -28,6 +34,8 @@ export interface CareStats {
   minigames: number;
   /** Best score in the catch mini-game. */
   bestCatch: number;
+  /** Successful trick performances. */
+  tricks: number;
 }
 
 export interface ActiveIllness {
@@ -59,6 +67,9 @@ export interface PetState {
   /** Fractional passive XP not yet awarded (avoids losing XP to rounding). */
   pendingCareXp: number;
   stats: CareStats;
+  personality: PersonalityId;
+  /** Trick mastery 0..100 (missing = never practiced). */
+  tricks: Partial<Record<TrickId, number>>;
   /** Real timestamp (ms) after which an action grants XP again. */
   xpReadyAt: Partial<Record<ActionId, number>>;
 }
@@ -134,7 +145,11 @@ export type ActivityKind =
   | 'sleep'
   | 'wake'
   | 'celebrate'
-  | 'refuse';
+  | 'refuse'
+  /** A trick done right (itemId = trick id). */
+  | 'trick'
+  /** A trick attempt that went wrong (itemId = trick id). */
+  | 'confused';
 
 export type GameEvent =
   | { type: 'xp'; amount: number; source: string }
@@ -146,6 +161,7 @@ export type GameEvent =
   | { type: 'warning'; need: NeedId }
   | { type: 'gotSick'; illnessId: string }
   | { type: 'cured'; illnessId: string; treatment: string }
+  | { type: 'trickMastered'; trickId: TrickId; coins: number }
   | { type: 'message'; text: string; tone: 'info' | 'good' | 'bad' };
 
 export interface StepResult {

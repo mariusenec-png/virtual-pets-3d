@@ -32,6 +32,9 @@ import {
 import { applyXp, getGrowthStage, nextStageRequirements } from '../progression';
 import { advanceToNow, simulateHours } from '../simulation';
 import type { GameState } from '../types';
+import { getPersonality, personalityFromId, PERSONALITIES, randomPersonality } from '../../config/personality';
+import { TRAINING, TRICKS, trickLevel } from '../../config/tricks';
+import { practiceTrick, trainingBlockedReason, trickSuccessChance } from '../tricks';
 
 const T0 = 1_700_000_000_000;
 
@@ -672,6 +675,134 @@ describe('audio helpers', () => {
     if (r.status !== 'ok') throw new Error('load failed');
     expect(r.household.settings.audio.muted).toBe(false);
     expect(r.household.settings.audio.master).toBeGreaterThan(0);
+  });
+});
+
+describe('tricks and personality', () => {
+  const always = () => 0;
+  const never = () => 0.999;
+
+  function trainee(level = 10): GameState {
+    const g = newCat();
+    g.pet!.level = level;
+    g.pet!.needs.energy = 100;
+    g.pet!.needs.happiness = 80;
+    return g;
+  }
+
+  it('new pets start curious with no tricks', () => {
+    const g = newCat();
+    expect(g.pet!.personality).toBe('curious');
+    expect(g.pet!.tricks).toEqual({});
+    expect(PERSONALITIES.map((p) => p.id)).toContain(randomPersonality(() => 0.99));
+    expect(personalityFromId('abc')).toBe(personalityFromId('abc'));
+  });
+
+  it('a successful attempt costs energy, teaches and plays the trick', () => {
+    const g = trainee();
+    const r = practiceTrick(g, 'sit', T0, always);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const pet = r.state.pet!;
+    expect(pet.needs.energy).toBe(100 - TRAINING.energyCost);
+    expect(pet.tricks.sit).toBeCloseTo(TRAINING.gainOnSuccess * 1.3, 5);
+    expect(pet.stats.tricks).toBe(1);
+    expect(r.events).toContainEqual({ type: 'activity', activity: 'trick', itemId: 'sit' });
+    expect(r.events.some((e) => e.type === 'xp')).toBe(true);
+    // Input is not mutated.
+    expect(g.pet!.tricks.sit).toBeUndefined();
+  });
+
+  it('a failed attempt teaches less and shows confusion', () => {
+    const r = practiceTrick(trainee(), 'paw', T0, never);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.state.pet!.tricks.paw).toBeCloseTo(Math.round(TRAINING.gainOnFail * 0.85 * 1.3 * 10) / 10, 5);
+    expect(r.events).toContainEqual({ type: 'activity', activity: 'confused', itemId: 'paw' });
+    expect(r.events.some((e) => e.type === 'xp')).toBe(false);
+  });
+
+  it('mastering a trick pays coins once and then it always works', () => {
+    let g = trainee();
+    const coins0 = g.coins;
+    let mastered = 0;
+    for (let i = 0; i < 40 && (g.pet!.tricks.sit ?? 0) < 100; i++) {
+      g.pet!.needs.energy = 100;
+      const r = practiceTrick(g, 'sit', T0, always);
+      if (!r.ok) throw new Error(r.reason);
+      mastered += r.events.filter((e) => e.type === 'trickMastered').length;
+      g = r.state;
+    }
+    expect(g.pet!.tricks.sit).toBe(100);
+    expect(mastered).toBe(1);
+    expect(trickLevel(g.pet!.tricks.sit)).toBe('mastered');
+    expect(trickSuccessChance(g.pet!, 'sit')).toBe(1);
+    expect(g.coins).toBe(coins0 + TRAINING.masteredCoins);
+    const again = practiceTrick(g, 'sit', T0, never);
+    expect(again.ok && again.events.some((e) => e.type === 'activity' && e.activity === 'trick')).toBe(true);
+    expect(again.ok && again.state.coins).toBe(g.coins);
+  });
+
+  it('blocks training when locked, tired, sad, sick or asleep', () => {
+    const rollOver = TRICKS.find((tr) => tr.id === 'rollOver')!;
+    expect(trainingBlockedReason(trainee(1), rollOver)).not.toBeNull();
+    const tired = trainee();
+    tired.pet!.needs.energy = TRAINING.minEnergy - 1;
+    expect(practiceTrick(tired, 'sit', T0, always).ok).toBe(false);
+    const sad = trainee();
+    sad.pet!.needs.happiness = TRAINING.minHappiness - 1;
+    expect(practiceTrick(sad, 'sit', T0, always).ok).toBe(false);
+    const sick = trainee();
+    sick.pet!.illness = { id: 'sniffles', sinceAgeHours: 0 };
+    expect(practiceTrick(sick, 'sit', T0, always).ok).toBe(false);
+    const asleep = trainee();
+    asleep.pet!.isSleeping = true;
+    expect(practiceTrick(asleep, 'sit', T0, always).ok).toBe(false);
+    expect(practiceTrick(trainee(), 'juggle', T0, always).ok).toBe(false);
+  });
+
+  it('mood changes the success chance', () => {
+    const happy = trainee().pet!;
+    const sad = trainee().pet!;
+    sad.needs.happiness = 20;
+    expect(trickSuccessChance(happy, 'sit')).toBeGreaterThan(trickSuccessChance(sad, 'sit'));
+  });
+
+  it('personality changes decay and joy', () => {
+    const lazy = newCat();
+    lazy.pet!.personality = 'lazy';
+    const curious = newCat();
+    const a = simulateHours(lazy, 2, { offline: false, rng: () => 0.99 }).state.pet!;
+    const b = simulateHours(curious, 2, { offline: false, rng: () => 0.99 }).state.pet!;
+    expect(a.needs.energy).toBeGreaterThan(b.needs.energy);
+
+    const cuddly = newCat();
+    cuddly.pet!.personality = 'cuddly';
+    cuddly.pet!.needs.happiness = 40;
+    const plain = newCat();
+    plain.pet!.needs.happiness = 40;
+    const rc = petAnimal(cuddly, T0);
+    const rp = petAnimal(plain, T0);
+    expect(rc.ok && rp.ok && rc.state.pet!.needs.happiness > rp.state.pet!.needs.happiness).toBe(true);
+    expect(getPersonality('cuddly').pettingJoy).toBeGreaterThan(1);
+  });
+
+  it('old saves get a personality and keep working', () => {
+    const store = memoryStore();
+    const home = newHome();
+    const legacy = structuredClone(home) as unknown as { pets: Record<string, unknown>[] };
+    delete legacy.pets[0].personality;
+    delete legacy.pets[0].tricks;
+    delete (legacy.pets[0].stats as Record<string, unknown>).tricks;
+    store.setItem('virtual-pets-3d/save', JSON.stringify({ version: 2, savedAt: T0, household: legacy }));
+    const r = loadHousehold(T0, store);
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.repaired).toBe(false);
+    const pet = r.household.pets[0];
+    expect(PERSONALITIES.map((p) => p.id)).toContain(pet.personality);
+    expect(pet.tricks).toEqual({});
+    expect(pet.stats.tricks).toBe(0);
   });
 });
 
