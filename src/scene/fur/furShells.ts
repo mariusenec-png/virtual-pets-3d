@@ -28,6 +28,94 @@ export interface FurOptions {
   rootShade: number;
   /** Random per-strand brightness variation (0..1). */
   strandVariation: number;
+  /** How much strands lean along the body (combed coat), fraction of fur length. */
+  comb?: number;
+  /** How much strand tips gather into small tufts (0..1). */
+  clump?: number;
+  /** Soft light on the silhouette, like light scattering through hair (0..1). */
+  rim?: number;
+  /** Strength of the silky highlight running across the strands (0..1). */
+  sheen?: number;
+  /** Fur length per body region (1 = lengthRatio). */
+  profile?: FurProfile;
+}
+
+export interface FurProfile {
+  body: number;
+  legs: number;
+  head: number;
+  tail: number;
+  chest: number;
+  belly: number;
+}
+
+/**
+ * Where the body regions are, in normalized model space (facing +Z, feet at
+ * y = 0, 1 unit tall), so fur can be longer on the tail and chest, shorter
+ * on the face and legs, and combed from head to tail.
+ */
+export interface FurLayout {
+  /** Body-mesh local space -> normalized model space. */
+  toModel: THREE.Matrix4;
+  regions: { legTop: number; tailStartZ: number; neckZ: number };
+  /** Base of the tail (y, z) in normalized model space. */
+  tailBase: [number, number];
+}
+
+/** Direction of the main light (world space), used for the fur sheen. */
+const SHEEN_LIGHT_DIR = new THREE.Vector3(2.5, 4.5, 2.5).normalize();
+
+function smoothstep(e0: number, e1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Per-vertex fur length multiplier and combing direction (body-local).
+ * Pure CPU work, done once per fur build.
+ */
+function furLayoutAttributes(
+  geometry: THREE.BufferGeometry,
+  layout: FurLayout,
+  profile: FurProfile,
+): { length: Float32Array; flow: Float32Array } {
+  const pos = geometry.getAttribute('position');
+  const length = new Float32Array(pos.count);
+  const flow = new Float32Array(pos.count * 3);
+  const { legTop, tailStartZ, neckZ } = layout.regions;
+  const back = new THREE.Matrix4().copy(layout.toModel).invert();
+  const v = new THREE.Vector3();
+  const f = new THREE.Vector3();
+  const tmp = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(layout.toModel);
+    const leg = 1 - smoothstep(legTop - 0.05, legTop + 0.04, v.y);
+    const tail = (1 - smoothstep(tailStartZ - 0.03, tailStartZ + 0.04, v.z)) * (1 - leg);
+    const head = smoothstep(neckZ - 0.02, neckZ + 0.08, v.z) * smoothstep(legTop, legTop + 0.1, v.y) * (1 - leg);
+    const torso = (1 - leg) * (1 - tail) * (1 - head);
+    const chest = torso * smoothstep(neckZ - 0.22, neckZ - 0.04, v.z) * (1 - smoothstep(legTop + 0.15, legTop + 0.3, v.y));
+    const belly = torso * (1 - chest) * (1 - smoothstep(legTop + 0.01, legTop + 0.1, v.y));
+    let len = profile.body;
+    len += (profile.belly - len) * belly;
+    len += (profile.chest - len) * chest;
+    len += (profile.head - len) * head;
+    len += (profile.tail - len) * tail;
+    len += (profile.legs - len) * leg;
+    length[i] = len;
+
+    // Combing: from the nose backwards, down the legs, out along the tail.
+    f.set(0, -0.45, -1).multiplyScalar(torso);
+    f.addScaledVector(tmp.set(0, -0.25, -1), head);
+    f.addScaledVector(tmp.set(0, -1, 0.05), leg);
+    tmp.set(0, v.y - layout.tailBase[0], v.z - layout.tailBase[1]);
+    if (tmp.lengthSq() > 1e-6) f.addScaledVector(tmp.normalize(), tail);
+    if (f.lengthSq() < 1e-6) f.set(0, -1, 0);
+    f.transformDirection(back);
+    flow[i * 3] = f.x;
+    flow[i * 3 + 1] = f.y;
+    flow[i * 3 + 2] = f.z;
+  }
+  return { length, flow };
 }
 
 export interface FurHandle {
@@ -144,6 +232,10 @@ function makeFurMaterial(
         '#include <common>',
         `#include <common>
 attribute float furMask;
+attribute float furLen;
+attribute vec3 furFlow;
+uniform float uComb;
+varying vec3 vFurTangent;
 uniform float uFurLength;
 uniform float uShells;
 uniform float uTime;
@@ -163,14 +255,19 @@ float furH = (uShellIndex + 1.0) / uShells;
 #else
 float furH = (float(gl_InstanceID) + 1.0) / uShells;
 #endif
-float furLen = uFurLength * furMask;
+float furL = uFurLength * furMask * furLen;
+vec3 furN = normalize(normal);
+// Strands lean along the coat's direction (combed), more towards the tips.
+vec3 furT = furFlow - furN * dot(furFlow, furN);
+furT = dot(furT, furT) > 1e-8 ? normalize(furT) : vec3(0.0);
 vec3 transformed = vec3(position);
 // Rest-pose normal: skinning is applied to the displaced position afterwards.
-transformed += normalize(normal) * furLen * furH;
+transformed += furN * furL * furH + furT * furL * uComb * pow(furH, 1.5);
 // Tips droop and sway a little.
-transformed.y -= uGravity * furLen * furH * furH;
+transformed.y -= uGravity * furL * furH * furH;
 transformed.xz += vec2(sin(uTime * 1.7 + position.y * 60.0), cos(uTime * 1.3 + position.x * 60.0))
-  * furLen * 0.12 * furH * furH;
+  * furL * 0.1 * furH * furH;
+vFurTangent = normalize(normalMatrix * normalize(furN * 0.35 + furT * max(uComb, 0.05)));
 vFurBase = position;
 vFurH = furH;
 vFurMask = furMask;
@@ -186,6 +283,11 @@ ${COAT_VERTEX}
 uniform float uDensity;
 uniform float uRootShade;
 uniform float uStrandVariation;
+uniform float uClump;
+uniform float uRim;
+uniform float uSheen;
+uniform vec3 uLightDir;
+varying vec3 vFurTangent;
 varying vec3 vFurBase;
 varying float vFurH;
 varying float vFurMask;
@@ -206,11 +308,22 @@ float furStrand(vec3 p, out float rnd) {
   vec3 f = fract(p) - 0.5;
   rnd = furHash(cell);
   vec3 jitter = vec3(furHash(cell + 11.3), furHash(cell + 27.1), furHash(cell + 43.7)) - 0.5;
-  float strandLen = 0.45 + 0.55 * rnd;
+  float strandLen = 0.55 + 0.45 * rnd;
   if (vFurH > strandLen) return 0.0;
-  float radius = 0.55 * (1.0 - vFurH / strandLen) + 0.05;
-  float d = length(f - jitter * 0.45);
-  return 1.0 - smoothstep(radius * 0.7, radius, d);
+  // Thick at the root, a fine point at the tip.
+  float taper = 1.0 - vFurH / strandLen;
+  float radius = 0.46 * taper * taper + 0.07 * taper + 0.04;
+  float d = length(f - jitter * 0.5);
+  return 1.0 - smoothstep(radius * 0.6, radius, d);
+}
+
+// Pulls strand tips towards the centre of small tufts (clumps).
+vec3 furClump(vec3 p) {
+  vec3 cp = p * 0.2;
+  vec3 cell = floor(cp);
+  vec3 centre = vec3(furHash(cell + 3.1), furHash(cell + 7.7), furHash(cell + 5.3)) * 0.6 + 0.2;
+  vec3 offset = (fract(cp) - centre) / 0.2;
+  return p + offset * uClump * vFurH * vFurH;
 }`,
       )
       .replace(
@@ -220,21 +333,39 @@ float furStrand(vec3 p, out float rnd) {
 diffuseColor.rgb = coatColor(diffuseColor.rgb, vCoatPos, normalize(vCoatNormal));
 #endif
 {
-  vec3 p = vFurBase * uDensity;
+  vec3 p = furClump(vFurBase * uDensity);
   float r1; float r2;
   float c1 = furStrand(p, r1);
   float c2 = furStrand(p + vec3(0.5, 0.31, 0.77), r2);
   float cov = max(c1, c2) * step(0.04, vFurMask);
-  if (cov < 0.02) discard;
+  // Faint coverage at the very tips only adds speckles on the silhouette.
+  if (cov < 0.12) discard;
   diffuseColor.a = cov;
   float rnd = c1 >= c2 ? r1 : r2;
-  float shade = mix(uRootShade, 0.97, vFurH * vFurH);
+  // Darker deep in the coat (self-shadowing), slightly lighter tips.
+  float shade = mix(uRootShade, 1.0, smoothstep(0.0, 0.85, vFurH)) + 0.05 * smoothstep(0.75, 1.0, vFurH);
   diffuseColor.rgb *= shade * (1.0 - uStrandVariation * 0.5 + uStrandVariation * rnd);
+}`,
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+{
+  vec3 furV = normalize(vViewPosition);
+  // Light scattering through the hair on the silhouette.
+  float furRim = pow(1.0 - saturate(dot(normal, furV)), 2.5);
+  totalEmissiveRadiance += diffuseColor.rgb * furRim * uRim * (0.25 + 0.75 * vFurH);
+  // Kajiya-Kay style highlight across the strands.
+  vec3 furL = normalize((viewMatrix * vec4(uLightDir, 0.0)).xyz);
+  vec3 furHv = normalize(furL + furV);
+  float furTH = dot(normalize(vFurTangent), furHv);
+  float furSpec = pow(sqrt(max(0.0, 1.0 - furTH * furTH)), 48.0) * smoothstep(-0.1, 0.4, dot(normal, furL));
+  totalEmissiveRadiance += vec3(1.0, 0.96, 0.9) * furSpec * uSheen * vFurH * (0.6 + 0.4 * diffuseColor.r);
 }`,
       );
   };
   // Distinct cache key so three does not reuse the plain standard program.
-  mat.customProgramCacheKey = () => 'fur-shells-v2';
+  mat.customProgramCacheKey = () => 'fur-shells-v3';
   return mat;
 }
 
@@ -251,6 +382,7 @@ export function createFurShells(
   modelHeight: number,
   opts: FurOptions,
   coat?: CoatUniforms,
+  layout?: FurLayout,
 ): FurHandle | null {
   if (opts.shells <= 0) return null;
   const normal = body.geometry.getAttribute('normal');
@@ -271,6 +403,15 @@ export function createFurShells(
   if (uv) geometry.setAttribute('uv', uv);
   if (body.geometry.index) geometry.setIndex(body.geometry.index);
   geometry.setAttribute('furMask', new THREE.BufferAttribute(cachedFurMask(body, excluded, furLength * 1.1), 1));
+  if (layout && opts.profile) {
+    const attrs = furLayoutAttributes(body.geometry, layout, opts.profile);
+    geometry.setAttribute('furLen', new THREE.BufferAttribute(attrs.length, 1));
+    geometry.setAttribute('furFlow', new THREE.BufferAttribute(attrs.flow, 3));
+  } else {
+    const count = body.geometry.getAttribute('position').count;
+    geometry.setAttribute('furLen', new THREE.BufferAttribute(new Float32Array(count).fill(1), 1));
+    geometry.setAttribute('furFlow', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+  }
 
   const uniforms: Record<string, THREE.IUniform> = {
     uFurLength: { value: furLength },
@@ -280,6 +421,11 @@ export function createFurShells(
     uDensity: { value: density },
     uRootShade: { value: opts.rootShade },
     uStrandVariation: { value: opts.strandVariation },
+    uComb: { value: layout ? (opts.comb ?? 0) : 0 },
+    uClump: { value: opts.clump ?? 0 },
+    uRim: { value: opts.rim ?? 0 },
+    uSheen: { value: opts.sheen ?? 0 },
+    uLightDir: { value: SHEEN_LIGHT_DIR.clone() },
     ...coat,
   };
 

@@ -71,8 +71,14 @@ single instanced draw call, each copy pushed further out along the normals. A pr
 pattern in the shader keeps only the hair strands, which taper towards the tips, droop slightly and
 sway. No fur textures or UVs are required.
 
-- Fur look per species: `fur` in `src/species/cat.ts` / `dog.ts` (length, density, droop, shading).
-- Quality (Off / Low / High = 0 / 12 / 24 shells): Settings → Fur. Stored in the save.
+- Fur look per species: `fur` in `src/species/cat.ts` / `dog.ts` (length, density, droop, shading,
+  combing, tufts, rim light, sheen, length per body region).
+- Strands are combed along the body (head to tail, down the legs, out along the tail) and lean more
+  towards the tips; tips gather into small tufts; fur is longer on the tail, chest and belly and
+  shorter on the face and legs (per-vertex attributes computed once from the model's regions).
+- Lighting: darker roots (self-shadowing), a soft rim where light scatters through the hair on the
+  silhouette and a Kajiya-Kay style highlight across the strands.
+- Quality (Off / Low / High = 0 / 12 / 32 shells): Settings → Fur. Stored in the save.
 - Fur fades out near other parts of the model (eyes, nose, mouth, whiskers, ears, paws) using a
   per-vertex mask computed once when the model loads.
 - Fur flattens while wet during a bath and slowly dries afterwards; it darkens with dirt like the body.

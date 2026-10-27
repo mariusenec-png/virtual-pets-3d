@@ -56,6 +56,16 @@ export interface FurStyle {
   rootShade: number;
   /** Random brightness variation between strands (0..1). */
   strandVariation: number;
+  /** How much strands lie down along the body, head to tail (fraction of length). */
+  comb: number;
+  /** How much strand tips gather into tufts (0..1). */
+  clump: number;
+  /** Soft back-light glow on the silhouette (0..1). */
+  rim: number;
+  /** Silky highlight across the strands (0..1). */
+  sheen: number;
+  /** Fur length per body region (1 = lengthRatio). */
+  profile: { body: number; legs: number; head: number; tail: number; chest: number; belly: number };
 }
 
 export interface SpeciesDefinition {

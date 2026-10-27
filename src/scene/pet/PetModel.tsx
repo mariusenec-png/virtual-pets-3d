@@ -7,7 +7,7 @@ import type { GrowthStage } from '../../game/types';
 import type { SpeciesDefinition } from '../../species/types';
 import { useGameStore } from '../../store/gameStore';
 import { applyCoatToMaterial, createCoatUniforms, type CoatUniforms } from '../coat/coat';
-import { createFurShells, findBodyMesh, type FurHandle } from '../fur/furShells';
+import { createFurShells, findBodyMesh, type FurHandle, type FurLayout } from '../fur/furShells';
 import { RigAnimator } from '../rig/animator';
 import { buildRig, resetRigPose, type PetRig } from '../rig/autoRig';
 import { applyEyeScale, collectEyeParts } from './eyeParts';
@@ -84,20 +84,29 @@ export function PetModel({
     // Coat markings, painted from the rest pose in normalized model space.
     const furBody = rig ? rig.body : body;
     let coat: CoatUniforms | null = null;
-    if (species.coat && furBody) {
+    let furLayout: FurLayout | null = null;
+    if (furBody) {
       wrapper.updateMatrixWorld(true);
       const toModel = new THREE.Matrix4()
         .makeScale(1 / size.y, 1 / size.y, 1 / size.y)
         .multiply(new THREE.Matrix4().copy(wrapper.matrixWorld).invert())
         .multiply(furBody.matrixWorld);
-      coat = createCoatUniforms(species.coat, toModel, species.rig?.regions ?? DEFAULT_REGIONS);
+      const tail0 = species.rig?.landmarks.tail[0];
+      furLayout = {
+        toModel,
+        regions: species.rig?.regions ?? DEFAULT_REGIONS,
+        tailBase: tail0 ? [tail0[1], tail0[2]] : [0.5, -0.42],
+      };
+      if (species.coat) coat = createCoatUniforms(species.coat, toModel, species.rig?.regions ?? DEFAULT_REGIONS);
+    }
+    if (species.coat && furBody && coat) {
       const mats = Array.isArray(furBody.material) ? furBody.material : [furBody.material];
       for (const m of mats) applyCoatToMaterial(m, coat);
     }
 
     // After rigging the eye meshes live under the head bone, so search the wrapper.
     const eyes = collectEyeParts(wrapper, species.model.eyePartPattern);
-    return { wrapper, root, materials, eyes, height: size.y, rig, animator, body: furBody, coat };
+    return { wrapper, root, materials, eyes, height: size.y, rig, animator, body: furBody, coat, furLayout };
   }, [scene, species]);
 
   useEffect(() => () => prepared.materials.forEach((m) => m.dispose()), [prepared]);
@@ -126,7 +135,15 @@ export function PetModel({
     });
     let handle: FurHandle | null = null;
     try {
-      handle = createFurShells(body, excluded, prepared.root, prepared.height, { shells, ...species.fur }, prepared.coat ?? undefined);
+      handle = createFurShells(
+        body,
+        excluded,
+        prepared.root,
+        prepared.height,
+        { shells, ...species.fur },
+        prepared.coat ?? undefined,
+        prepared.furLayout ?? undefined,
+      );
     } catch (e) {
       // Fur is cosmetic: never let it break the pet.
       console.warn('[virtual-pets-3d] Fur disabled:', e);

@@ -37,11 +37,17 @@ export const CAT: SpeciesDefinition = {
     adult: { height: 0.78, eyeScale: 1, proportions: [1, 1, 1], furLength: 1, furDensity: 1 },
   },
   fur: {
-    lengthRatio: 0.02,
-    densityPerHeight: 200,
-    gravity: 0.35,
+    lengthRatio: 0.026,
+    densityPerHeight: 420,
+    gravity: 0.3,
     rootShade: 0.62,
-    strandVariation: 0.18,
+    strandVariation: 0.12,
+    comb: 1.2,
+    clump: 0.6,
+    rim: 0.35,
+    sheen: 0.22,
+    // Fluffy tail and chest ruff, short fur on the face and legs.
+    profile: { body: 1, legs: 0.55, head: 0.6, tail: 1.5, chest: 1.3, belly: 1.15 },
   },
   placeholder: {
     body: '#8a8f96',

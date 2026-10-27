@@ -165,7 +165,7 @@ that will work once the game is hosted on an HTTPS site.
   possible while asleep, sick, exhausted or very sad. Each trick has its own animation; a failed
   try shows a puzzled pet.
 
-### Milestone 9 (this version)
+### Milestone 9
 
 - **Decorate the room** (🛋️ in the top bar): a shop with 10 pieces of furniture (cardboard box,
   floor cushion, scratching post, cat tree, dog house, armchair, aquarium with swimming fish, big
@@ -180,6 +180,13 @@ that will work once the game is hosted on an HTTPS site.
   surfaces with a little jump.
 - **Comfort**: each placed piece makes pets get bored a bit slower (happiness decays up to 30%
   slower), so coins now have a long-term use. Saves from earlier versions get the default room.
+
+### Fur update (this version)
+
+- Fur looks much softer and more natural: strands are combed along the body and lean towards the
+  tail, tips gather into small tufts, the coat is fluffier on the tail, chest and belly and short
+  on the face and legs, roots are darker, the silhouette glows softly against the light and the
+  coat has a silky highlight. High quality now uses 32 layers (Low stays at 12 for phones).
 
 ## Publishing (GitHub Pages)
 

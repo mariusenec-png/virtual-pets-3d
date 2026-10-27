@@ -5,7 +5,7 @@ import { t } from '../i18n';
 export const FUR_SHELLS: Record<FurQuality, number> = {
   off: 0,
   low: 12,
-  high: 24,
+  high: 32,
 };
 
 export const FUR_QUALITY_OPTIONS: { id: FurQuality; label: string }[] = [

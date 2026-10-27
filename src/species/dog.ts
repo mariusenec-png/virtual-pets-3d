@@ -38,11 +38,17 @@ export const DOG: SpeciesDefinition = {
   },
   fur: {
     // Short coat.
-    lengthRatio: 0.014,
-    densityPerHeight: 200,
+    lengthRatio: 0.017,
+    densityPerHeight: 380,
     gravity: 0.25,
-    rootShade: 0.66,
-    strandVariation: 0.18,
+    rootShade: 0.62,
+    strandVariation: 0.1,
+    // Short coat that lies flat and shines a little.
+    comb: 1.2,
+    clump: 0.3,
+    rim: 0.3,
+    sheen: 0.3,
+    profile: { body: 1, legs: 0.6, head: 0.55, tail: 1.25, chest: 1.15, belly: 1.05 },
   },
   placeholder: {
     body: '#b07a4a',
