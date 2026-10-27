@@ -24,6 +24,9 @@ import { t } from '../../i18n';
 
 const WALK_SPEED = 0.9; // m/s
 const ARRIVE_EPS = 0.02;
+/** Top of the bed's inner pad and its radius (see props/PetBed.tsx). */
+const BED_PAD_HEIGHT = 0.08;
+const BED_PAD_RADIUS = 0.36;
 const tmp = new THREE.Vector3();
 
 function vec(p: readonly [number, number, number]) {
@@ -62,6 +65,8 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     pose: { ...NEUTRAL_POSE } as Pose,
     height: targetHeight,
     proportions: [...appearance.proportions] as [number, number, number],
+    /** Height of whatever the pet stands on (the bed pad is raised). */
+    floor: 0,
   });
 
   const motion = useRef(createPetMotion(targetHeight)).current;
@@ -174,7 +179,11 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     p.scaleY = damp(p.scaleY, targetPose.scaleY, lambda, dt);
     p.scaleXZ = damp(p.scaleXZ, targetPose.scaleXZ, lambda, dt);
 
+    // Step up onto the bed pad instead of sinking into it.
+    const onBed = Math.hypot(st.pos.x - BED.x, st.pos.z - BED.z) < BED_PAD_RADIUS;
+    st.floor = damp(st.floor, onBed ? BED_PAD_HEIGHT : 0, 10, dt);
     g.position.copy(st.pos);
+    g.position.y = st.floor;
     g.rotation.y = st.heading;
     pg.position.y = p.lift * st.height;
     pg.rotation.set(p.pitch, p.yaw, p.roll);
