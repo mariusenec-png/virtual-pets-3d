@@ -543,13 +543,13 @@ export class RigAnimator {
       else lid = 1 - Math.sin(Math.PI * b);
     }
     let open = 1;
-    if (sleeping || this.lieW > 0.7) open = 0.06;
+    if (sleeping || this.lieW > 0.7) open = 0;
     else if (act === 'petted') open = cat ? 0.3 : 0.55;
     else if (i.unwell) open = 0.6;
     else if (beh === 'watch' && cat) open = Math.sin(t * 0.6) > 0.6 ? 0.25 : 1; // slow "cat kiss" blink
     else if (beh === 'rest') open = Math.sin(t * 0.35) > 0.5 ? 0.35 : 0.9;
     this.eyeOpen = expDamp(this.eyeOpen, open, 6, dt);
-    this.blink = Math.max(0.06, Math.min(this.eyeOpen, lid));
+    this.blink = Math.max(0, Math.min(this.eyeOpen, lid));
   }
 
   /**

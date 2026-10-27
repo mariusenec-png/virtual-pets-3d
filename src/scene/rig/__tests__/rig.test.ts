@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { CAT_RIG, DOG_RIG } from '../../../species/rigs';
 import { RigAnimator, type RigAnimInput } from '../animator';
 import { buildRig, computeSkinWeights, rigJoints } from '../autoRig';
+import { applyEyeScale, collectEyeParts } from '../../pet/eyeParts';
 
 function weightsAt(points: number[][], cfg = CAT_RIG) {
   const joints = rigJoints(cfg);
@@ -114,5 +115,28 @@ describe('auto-rig', () => {
       expect(anim.blink).toBeGreaterThan(0);
       expect(anim.blink).toBeLessThanOrEqual(1);
     }
+  });
+
+  it('adds eyelids that close over the eye', () => {
+    const head = new THREE.Group();
+    for (const x of [-0.05, 0.05]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.02), new THREE.MeshStandardMaterial());
+      eye.name = 'Eye';
+      eye.scale.set(1.3, 1, 0.6);
+      eye.position.set(x, 0.6, 0.48);
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.005), new THREE.MeshStandardMaterial());
+      pupil.name = 'Eye_pupil';
+      pupil.position.set(x, 0.6, 0.495);
+      head.add(eye, pupil);
+    }
+    const eyes = collectEyeParts(head, '^eye', new THREE.Color('#888888'));
+    expect(eyes.length).toBe(2);
+    for (const e of eyes) expect(e.lids).not.toBeNull();
+    applyEyeScale(eyes, 1, 1);
+    const open = eyes[0].lids!.upper.rotation.x;
+    applyEyeScale(eyes, 1.2, 0);
+    expect(eyes[0].lids!.upper.rotation.x).toBeGreaterThan(open);
+    expect(eyes[0].lids!.lower.rotation.x).toBeLessThan(Math.PI + 0.85);
+    expect(eyes[0].pivot.scale.y).toBeCloseTo(1.2, 5);
   });
 });

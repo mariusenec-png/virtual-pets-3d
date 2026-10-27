@@ -10,7 +10,7 @@ import { applyCoatToMaterial, createCoatUniforms, type CoatUniforms } from '../c
 import { createFurShells, findBodyMesh, type FurHandle, type FurLayout } from '../fur/furShells';
 import { RigAnimator } from '../rig/animator';
 import { buildRig, resetRigPose, type PetRig } from '../rig/autoRig';
-import { applyEyeScale, collectEyeParts } from './eyeParts';
+import { applyEyeScale, averageAlbedo, collectEyeParts } from './eyeParts';
 import type { PetMotion } from './motion';
 import { damp } from './poses';
 
@@ -105,7 +105,10 @@ export function PetModel({
     }
 
     // After rigging the eye meshes live under the head bone, so search the wrapper.
-    const eyes = collectEyeParts(wrapper, species.model.eyePartPattern);
+    // Eyelids take the coat color around the eyes (a bit lighter than the body average).
+    const bodyMat = furBody ? (Array.isArray(furBody.material) ? furBody.material[0] : furBody.material) : null;
+    const lidColor = bodyMat ? averageAlbedo(bodyMat).multiplyScalar(1.3) : undefined;
+    const eyes = collectEyeParts(wrapper, species.model.eyePartPattern, lidColor);
     return { wrapper, root, materials, eyes, height: size.y, rig, animator, body: furBody, coat, furLayout };
   }, [scene, species]);
 

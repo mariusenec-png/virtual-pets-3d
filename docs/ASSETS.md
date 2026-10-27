@@ -37,6 +37,14 @@ The GLBs ship without a skeleton, so one is generated when the model loads
 To rig a new model, add a `rig` entry with its landmarks. Without one the species falls back to
 whole-body motion (`computePose` in `src/scene/pet/poses.ts`).
 
+### Eyelids
+
+The models have no eyelids, so `src/scene/pet/eyeParts.ts` adds them: an ellipsoid is fitted
+around each eye's parts (eyeball, iris, pupil, glint), oriented along the eye's gaze, and two half
+shells in the coat color (average of the body material and its texture) with a dark lash line
+rotate over it. The animator's eye openness drives them: blinking every few seconds, half-closed
+when petted or ill, slow blinks while watching you or resting, closed while sleeping.
+
 ### Procedural animation
 
 `src/scene/rig/animator.ts` builds a target pose every frame from layers and eases every bone

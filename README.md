@@ -181,12 +181,18 @@ that will work once the game is hosted on an HTTPS site.
 - **Comfort**: each placed piece makes pets get bored a bit slower (happiness decays up to 30%
   slower), so coins now have a long-term use. Saves from earlier versions get the default room.
 
-### Fur update (this version)
+### Fur update
 
 - Fur looks much softer and more natural: strands are combed along the body and lean towards the
   tail, tips gather into small tufts, the coat is fluffier on the tail, chest and belly and short
   on the face and legs, roots are darker, the silhouette glows softly against the light and the
   coat has a silky highlight. High quality now uses 32 layers (Low stays at 12 for phones).
+
+### Eyelids (this version)
+
+- Cats and dogs have real eyelids now (upper and lower lid with a lash line) instead of squashing
+  the eyes: they blink every few seconds, half-close when petted or feeling ill, give slow blinks
+  while watching you, and close their eyes when sleeping.
 
 ## Publishing (GitHub Pages)
 
