@@ -134,7 +134,8 @@ function makeFurMaterial(
   const defines: Record<string, string> = {};
   if (perMesh) defines.FUR_PER_MESH = '';
   if (coat) defines.FUR_COAT = '';
-  mat.defines = defines;
+  // three.js honors `defines` on every material; the typings only declare it on ShaderMaterial.
+  (mat as THREE.Material & { defines?: Record<string, string> }).defines = defines;
 
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
