@@ -42,6 +42,10 @@ export interface RigAnimInput {
   hop: number;
   /** 0..1 pulse after touching a hazard in the mini-game. */
   flinch: number;
+  /** Last sound the pet made ('meow' / 'bark' ...) and how many seconds ago. */
+  vocal?: { kind: string; age: number } | null;
+  /** Low on energy (yawns now and then). */
+  tired?: boolean;
 }
 
 type Rot = [number, number, number];
@@ -168,6 +172,9 @@ const SIT_DROP = 0.53;
 const LIE_DROP = 0.58;
 const CROUCH_DROP = 0.22;
 
+const tmpQ = new THREE.Quaternion();
+const tmpE = new THREE.Euler();
+
 // --- Animator --------------------------------------------------------------
 
 export class RigAnimator {
@@ -199,6 +206,14 @@ export class RigAnimator {
   blink = 1;
   /** Eyebrow expression, eased; applied by the caller with the eyes. */
   readonly brows = { raise: 0, worry: 0, quirk: 0 };
+  /** Mouth: how open (0..1) and how far the tongue is out (0..1); applied by the caller. */
+  readonly mouth = { open: 0, tongue: 0 };
+  private readonly ears = { forward: 0, back: 0, droop: 0, swivel: 0 };
+  private nextTwitch = 3;
+  private twitchStart = -1;
+  private twitchSide = 1;
+  private nextYawn = 20;
+  private yawnStart = -1;
   private eyeOpen = 1;
   // Idle look target (changes every few seconds).
   private lookYaw = 0;
@@ -573,6 +588,9 @@ export class RigAnimator {
     b.raise = expDamp(b.raise, raise, 6, dt);
     b.worry = expDamp(b.worry, worry, 5, dt);
     b.quirk = expDamp(b.quirk, quirk, 6, dt);
+
+    this.updateEars(i, act, beh, sleeping, happy, dt);
+    this.updateMouth(i, act, beh, sleeping, moving, happy, cat, dt);
   }
 
   /**
@@ -747,5 +765,128 @@ export class RigAnimator {
       this.add('head', -0.1, 0.1 * side, 0.4 * side);
     }
     return { jump, drop };
+  }
+
+  /** Ears: perked forward when interested, flat back when annoyed, drooping when sad. */
+  private updateEars(i: RigAnimInput, act: ActivityKind | null, beh: BehaviorAnim | null, sleeping: boolean, happy: number, dt: number): void {
+    const L = this.rig.bones.get('earL');
+    const R = this.rig.bones.get('earR');
+    if (!L || !R) return;
+    const t = i.time;
+    let forward = 0;
+    let back = 0;
+    let droop = 0;
+    if (sleeping) {
+      back = 0.3;
+      droop = 0.25;
+    } else if (act === 'refuse' || act === 'bath' || i.flinch > 0) back = 1;
+    else if (act === 'petted') back = 0.45;
+    else if (
+      act === 'play' || act === 'trick' || act === 'celebrate' || act === 'eat' || i.hop > 0 ||
+      beh === 'window' || beh === 'watchItem' || beh === 'watch' || beh === 'beg' || beh === 'toy' || beh === 'sniff'
+    ) {
+      forward = 0.8;
+    } else if (act === 'confused') {
+      forward = 0.3;
+      droop = 0.35;
+    }
+    if (!sleeping && act !== 'refuse' && (i.unwell || happy < 0.3)) {
+      droop = Math.max(droop, 0.85);
+      back = Math.max(back, 0.25);
+      forward = 0;
+    }
+    const e = this.ears;
+    e.forward = expDamp(e.forward, forward, 6, dt);
+    e.back = expDamp(e.back, back, 8, dt);
+    e.droop = expDamp(e.droop, droop, 4, dt);
+    // Ears turn towards "sounds" now and then; one ear twitches.
+    e.swivel = expDamp(e.swivel, 0.35 * Math.sin(t * 0.5) * Math.sin(t * 0.17 + 1), 3, dt);
+    if (t >= this.nextTwitch && this.twitchStart < 0 && !sleeping) {
+      this.twitchStart = t;
+      this.twitchSide = this.rand() < 0.5 ? 1 : -1;
+      this.nextTwitch = t + 2.5 + this.rand() * 5;
+    }
+    let twitch = 0;
+    if (this.twitchStart >= 0) {
+      const k = (t - this.twitchStart) / 0.28;
+      if (k >= 1) this.twitchStart = -1;
+      else twitch = Math.sin(Math.PI * k);
+    }
+    for (const [bone, s] of [
+      [L, 1],
+      [R, -1],
+    ] as const) {
+      const tw = this.twitchSide === s ? twitch : 0;
+      const x = 0.3 * e.forward - 0.95 * e.back - 0.5 * tw;
+      const z = -s * (0.85 * e.droop + 0.2 * e.back + 0.15 * tw);
+      const y = s * (0.35 * e.swivel * (1 - e.back)) + s * 0.3 * e.back;
+      bone.quaternion.multiply(tmpQ.setFromEuler(tmpE.set(x, y, z)));
+    }
+  }
+
+  /** Mouth: meows and barks, yawns, panting (dogs), chewing, lapping and licking. */
+  private updateMouth(
+    i: RigAnimInput,
+    act: ActivityKind | null,
+    beh: BehaviorAnim | null,
+    sleeping: boolean,
+    moving: boolean,
+    happy: number,
+    cat: boolean,
+    dt: number,
+  ): void {
+    const t = i.time;
+    let open = 0;
+    let tongue = 0;
+    const v = i.vocal;
+    if (v && v.age >= 0 && v.age < 0.8) {
+      if (v.kind === 'meow') open = Math.max(open, 0.85 * Math.sin(Math.PI * Math.min(1, v.age / 0.7)));
+      else if (v.kind === 'bark') open = Math.max(open, Math.abs(Math.sin((v.age / 0.22) * Math.PI)) * (v.age < 0.44 ? 0.9 : 0));
+      else if (v.kind === 'happyDog') {
+        open = Math.max(open, 0.5);
+        tongue = Math.max(tongue, 0.8);
+      }
+    }
+    // Yawns: when waking up, and now and then when tired.
+    if (act === 'wake' && i.progress > 0.1 && i.progress < 0.8 && this.yawnStart < 0) this.yawnStart = t;
+    if (i.tired && !act && !moving && !sleeping && t >= this.nextYawn && this.yawnStart < 0) {
+      this.yawnStart = t;
+      this.nextYawn = t + 18 + this.rand() * 20;
+    }
+    if (this.yawnStart >= 0) {
+      const k = (t - this.yawnStart) / 1.6;
+      if (k >= 1 || moving) this.yawnStart = -1;
+      else {
+        const y = Math.sin(Math.PI * Math.min(1, k * 1.15));
+        open = Math.max(open, y);
+        tongue = Math.max(tongue, 0.35 * y);
+        // Eyes squeeze shut and the head tips back while yawning.
+        this.blink = Math.min(this.blink, 1 - 0.9 * y);
+        // (Bones were already eased this frame: apply on top.)
+        this.rig.bones.get('neck')?.quaternion.multiply(tmpQ.setFromEuler(tmpE.set(-0.25 * y, 0, 0)));
+        this.rig.bones.get('head')?.quaternion.multiply(tmpQ.setFromEuler(tmpE.set(-0.2 * y, 0, 0)));
+      }
+    }
+    if (!sleeping) {
+      if (act === 'eat' && i.arrived) open = Math.max(open, 0.12 + 0.12 * Math.max(0, Math.sin(t * 9)));
+      if (act === 'drink' && i.arrived) {
+        const lap = Math.max(0, Math.sin(t * 14));
+        open = Math.max(open, 0.2);
+        tongue = Math.max(tongue, 0.75 * lap);
+      }
+      if (beh === 'groom') {
+        open = Math.max(open, 0.15);
+        tongue = Math.max(tongue, 0.5 * Math.max(0, Math.sin(t * 11)));
+      }
+      // Happy dogs pant with the tongue out, especially when moving or playing.
+      const pant = !cat && !i.unwell && happy > 0.55 && (moving || act === 'play' || act === 'trick' || act === 'celebrate' || beh === 'toy' || beh === 'chaseTail' || beh === 'watch' || beh === 'beg');
+      if (pant) {
+        open = Math.max(open, 0.42 + 0.08 * Math.sin(t * 10));
+        tongue = Math.max(tongue, 0.9);
+      }
+    }
+    const m = this.mouth;
+    m.open = expDamp(m.open, open, 14, dt);
+    m.tongue = expDamp(m.tongue, tongue, 10, dt);
   }
 }

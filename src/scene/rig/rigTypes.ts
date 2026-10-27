@@ -23,6 +23,8 @@ export interface RigLandmarks {
   hindToe: Vec3;
   /** Tail joints from base to tip (the last point is the tail end). */
   tail: Vec3[];
+  /** Left ear (base on the head, tip); the right ear mirrors. Optional. */
+  ear?: { base: Vec3; tip: Vec3; radius: number };
 }
 
 export interface RigRegions {
@@ -57,4 +59,6 @@ export type BoneName =
   | 'hipR'
   | 'kneeR'
   | 'hockR'
+  | 'earL'
+  | 'earR'
   | `tail${number}`;

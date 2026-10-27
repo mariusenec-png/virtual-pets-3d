@@ -4,7 +4,7 @@ import { Suspense, useRef } from 'react';
 import * as THREE from 'three';
 import { ROOM_LAYOUT } from '../../config/activities';
 import { NEEDS } from '../../config/needs';
-import { playSound } from '../../audio/engine';
+import { getLastVocal, playSound } from '../../audio/engine';
 import { getGrowthStage } from '../../game/progression';
 import type { SpeciesId } from '../../game/types';
 import { getSpecies } from '../../species/registry';
@@ -245,6 +245,9 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     mi.happiness = pet.needs.happiness;
     mi.hop = hop;
     mi.flinch = flinch;
+    const vocal = getLastVocal();
+    mi.vocal = { kind: vocal.id, age: (performance.now() - vocal.at) / 1000 };
+    mi.tired = pet.needs.energy < 35;
 
     const targetPose = motion.rigged ? computeRiggedOuterPose(poseInput) : computePose(poseInput);
     // Mini-game: hop when catching; without a skeleton, shake the whole body after a hazard.

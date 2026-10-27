@@ -17,7 +17,7 @@ interface JointDef {
   parent: string | null;
   head: Vec3;
   end: Vec3;
-  kind: 'body' | 'neck' | 'head' | 'frontUpper' | 'frontLower' | 'hindUpper' | 'hindLower' | 'tail';
+  kind: 'body' | 'neck' | 'head' | 'frontUpper' | 'frontLower' | 'hindUpper' | 'hindLower' | 'tail' | 'ear';
   side?: 'L' | 'R';
 }
 
@@ -79,6 +79,12 @@ export function rigJoints(cfg: RigConfig): JointDef[] {
       { name: `hock${side}`, parent: `knee${side}`, head: m(L.hock), end: m(L.hindToe), kind: 'hindLower', side },
     );
   }
+  if (L.ear) {
+    joints.push(
+      { name: 'earL', parent: 'head', head: L.ear.base, end: L.ear.tip, kind: 'ear', side: 'L' },
+      { name: 'earR', parent: 'head', head: mirror(L.ear.base), end: mirror(L.ear.tip), kind: 'ear', side: 'R' },
+    );
+  }
   for (let i = 0; i < L.tail.length - 1; i++) {
     joints.push({ name: `tail${i}`, parent: i === 0 ? 'pelvis' : `tail${i - 1}`, head: L.tail[i], end: L.tail[i + 1], kind: 'tail' });
   }
@@ -124,6 +130,13 @@ function gate(j: JointDef, x: number, y: number, z: number, cfg: RigConfig): num
       return headGate;
     case 'tail':
       return tailGate;
+    case 'ear': {
+      // Only what is above the ear base, on the ear's side and close to it.
+      const e = L.ear!;
+      const above = smoothstep(e.base[1] - 0.005, e.base[1] + 0.03, y);
+      const near = 1 - smoothstep(e.radius * 0.7, e.radius * 1.4, Math.hypot(Math.abs(x) - e.base[0], z - e.base[2]));
+      return sideGate * above * near * headGate;
+    }
     case 'frontUpper':
       return sideGate * front * (1 - smoothstep(legTop + 0.04, legTop + 0.2, y)) * (1 - headGate * 0.8);
     case 'frontLower':

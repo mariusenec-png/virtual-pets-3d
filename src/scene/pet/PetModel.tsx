@@ -11,6 +11,7 @@ import { createFurShells, findBodyMesh, type FurHandle, type FurLayout } from '.
 import { RigAnimator } from '../rig/animator';
 import { buildRig, resetRigPose, type PetRig } from '../rig/autoRig';
 import { applyEyeScale, averageAlbedo, collectEyeParts } from './eyeParts';
+import { buildMouth } from './mouth';
 import type { PetMotion } from './motion';
 import { damp } from './poses';
 
@@ -115,10 +116,20 @@ export function PetModel({
       surfaceOffset: species.fur.lengthRatio * species.fur.profile.head * size.y * 0.9,
       browWhiskers: species.id === 'cat',
     });
-    return { wrapper, root, materials, eyes, height: size.y, rig, animator, body: furBody, coat, furLayout };
+    // An opening mouth that follows the head bone.
+    const headBone = rig?.bones.get('head');
+    const mouth = species.mouth && headBone ? buildMouth(wrapper, headBone, furBody, size.y, species.mouth) : null;
+
+    return { wrapper, root, materials, eyes, height: size.y, rig, animator, body: furBody, coat, furLayout, mouth };
   }, [scene, species]);
 
-  useEffect(() => () => prepared.materials.forEach((m) => m.dispose()), [prepared]);
+  useEffect(
+    () => () => {
+      prepared.materials.forEach((m) => m.dispose());
+      prepared.mouth?.dispose();
+    },
+    [prepared],
+  );
 
   useEffect(() => {
     motion.rigged = !!prepared.rig;
@@ -181,6 +192,7 @@ export function PetModel({
     const animator = prepared.animator;
     if (animator) animator.update(motion.input, dt);
     applyEyeScale(prepared.eyes, a0.eye, animator ? animator.blink : 1, animator?.brows);
+    if (animator && prepared.mouth) prepared.mouth.update(animator.mouth.open, animator.mouth.tongue);
 
     const handle = fur.current;
     if (!handle) return;

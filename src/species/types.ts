@@ -1,6 +1,7 @@
 import type { GrowthStage, NeedId, SpeciesId } from '../game/types';
 import type { CoatStyle } from '../scene/coat/coatTypes';
 import type { RigConfig } from '../scene/rig/rigTypes';
+import type { MouthConfig } from '../scene/pet/mouthTypes';
 
 /**
  * A species definition describes everything species-specific: the 3D asset,
@@ -81,6 +82,8 @@ export interface SpeciesDefinition {
    * Without it the pet is animated by moving the whole model.
    */
   rig?: RigConfig;
+  /** Opening mouth (needs a rig: it follows the head bone). */
+  mouth?: MouthConfig;
   /** Procedural markings painted on skin and fur (tabby stripes, belly...). */
   coat?: CoatStyle;
   stages: Record<GrowthStage, StageAppearance>;

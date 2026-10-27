@@ -332,6 +332,17 @@ class AudioEngine {
 
 export const audio = new AudioEngine();
 
+/** Last vocal sound (meow, bark...) and when it was requested, so the pet's mouth can move with it. */
+let lastVocal = { id: '', at: -1e9 };
+const VOCAL: ReadonlySet<string> = new Set(['meow', 'bark', 'happyDog']);
+
+export function getLastVocal(): { id: string; at: number } {
+  return lastVocal;
+}
+
 export function playSound(id: SoundId | null, pitch = 1): void {
-  if (id) audio.play(id, pitch);
+  if (!id) return;
+  // Recorded even when muted: the animation does not depend on the audio.
+  if (VOCAL.has(id)) lastVocal = { id, at: performance.now() };
+  audio.play(id, pitch);
 }

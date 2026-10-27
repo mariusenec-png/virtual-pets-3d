@@ -21,6 +21,8 @@ export const CAT: SpeciesDefinition = {
     },
   },
   rig: CAT_RIG,
+  // Just under the mouth line, between the muzzle pads.
+  mouth: { center: [0, 0.528, 0.516], width: 0.036, height: 0.036, tongueLength: 0.022 },
   // Grey mackerel tabby with a pale belly.
   coat: {
     stripeColor: '#5e5e66',

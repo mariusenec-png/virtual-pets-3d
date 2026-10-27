@@ -194,11 +194,19 @@ that will work once the game is hosted on an HTTPS site.
   the eyes: they blink every few seconds, half-close when petted or feeling ill, give slow blinks
   while watching you, and close their eyes when sleeping.
 
-### Eyelashes and eyebrows (this version)
+### Eyelashes and eyebrows
 
 - Eyelashes on the upper lids (they move with every blink) and eyebrows that sit on the fur and
   show emotions: raised when playing or curious, worried when sad or ill, frowning when refusing,
   one brow up when confused. Cats also have long eyebrow whiskers.
+
+### Livelier face (this version)
+
+- **Ears that move**: perked forward when curious or playing, flat back when annoyed or in the
+  bath, drooping sideways when sad or ill, turning towards "sounds" and twitching now and then.
+- **Mouth that opens**: when meowing and barking, yawning (when waking up or tired, eyes squeezed
+  shut), chewing, lapping water and licking while grooming, with a tongue and little fangs. Happy
+  dogs pant with the tongue out.
 
 ## Publishing (GitHub Pages)
 

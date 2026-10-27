@@ -21,6 +21,8 @@ export const DOG: SpeciesDefinition = {
     },
   },
   rig: DOG_RIG,
+  // Under the nose at the front of the snout; the tongue can hang out when panting.
+  mouth: { center: [0, 0.652, 0.7], width: 0.06, height: 0.05, tongueLength: 0.075 },
   // Plain coat with a slightly darker back and a lighter belly.
   coat: {
     stripeColor: '#8a7360',

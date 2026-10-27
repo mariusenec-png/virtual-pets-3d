@@ -4,6 +4,7 @@ import { CAT_RIG, DOG_RIG } from '../../../species/rigs';
 import { RigAnimator, type RigAnimInput } from '../animator';
 import { buildRig, computeSkinWeights, rigJoints } from '../autoRig';
 import { applyEyeScale, collectEyeParts } from '../../pet/eyeParts';
+import { buildMouth } from '../../pet/mouth';
 
 function weightsAt(points: number[][], cfg = CAT_RIG) {
   const joints = rigJoints(cfg);
@@ -25,7 +26,7 @@ function dominant(m: Map<string, number>): string {
 describe('auto-rig', () => {
   it('builds a mirrored quadruped skeleton', () => {
     const names = rigJoints(DOG_RIG).map((j) => j.name);
-    for (const n of ['pelvis', 'chest', 'neck', 'head', 'shoulderL', 'shoulderR', 'hockL', 'hockR', 'tail0']) {
+    for (const n of ['pelvis', 'chest', 'neck', 'head', 'shoulderL', 'shoulderR', 'hockL', 'hockR', 'tail0', 'earL', 'earR']) {
       expect(names).toContain(n);
     }
     const joints = rigJoints(CAT_RIG);
@@ -144,5 +145,36 @@ describe('auto-rig', () => {
     const y0 = eyes[0].brow!.group.position.y;
     applyEyeScale(eyes, 1, 1, { raise: 1, worry: 0, quirk: 0 });
     expect(eyes[0].brow!.group.position.y).toBeGreaterThan(y0);
+  });
+
+  it('opens a mouth on the head and animates ears without NaNs', () => {
+    const wrapper = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 16), new THREE.MeshStandardMaterial());
+    body.position.set(0, 0.5, 0.1);
+    wrapper.add(body);
+    wrapper.updateMatrixWorld(true);
+    const rig = buildRig(wrapper, 1, body, [], CAT_RIG, 'mouth-test');
+    const mouth = buildMouth(wrapper, rig.bones.get('head')!, rig.body, 1, { center: [0, 0.53, 0.52], width: 0.04, height: 0.04, tongueLength: 0.02 });
+    const group = rig.bones.get('head')!.children.find((c) => c.name === 'mouth')!;
+    expect(group === undefined).toBe(false);
+    mouth.update(0, 0);
+    expect(group.children[0].visible).toBe(false);
+    mouth.update(0.8, 0.5);
+    expect(group.children[0].visible).toBe(true);
+    const anim = new RigAnimator(rig, CAT_RIG, 'cat', 3);
+    for (let k = 0; k < 60; k++) {
+      anim.update(
+        {
+          time: k / 30, speed: 0, height: 0.6, activity: k < 30 ? 'refuse' : null, itemId: null, behavior: null,
+          behaviorProgress: 0, spinning: false, progress: k / 30, arrived: true, sleeping: false, unwell: false,
+          happiness: 70, hop: 0, flinch: 0, vocal: { kind: 'meow', age: 0.3 }, tired: true,
+        },
+        1 / 30,
+      );
+    }
+    const ear = rig.bones.get('earL')!.quaternion;
+    expect(Number.isFinite(ear.x + ear.y + ear.z + ear.w)).toBe(true);
+    expect(anim.mouth.open).toBeGreaterThan(0);
+    mouth.dispose();
   });
 });

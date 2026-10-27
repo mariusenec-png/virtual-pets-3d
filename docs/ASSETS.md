@@ -51,6 +51,19 @@ follow the lid when blinking). Eyebrows are soft tubes above each eye, placed on
 raised when playing or interested, worried when sad or ill, cross when refusing, one brow up when
 confused. Cats also get three long eyebrow whiskers.
 
+### Ears and mouth
+
+Two ear bones (landmarks from the inner-ear meshes, `ear` in `src/species/rigs.ts`) only take the
+skin right around each ear. The animator perks them forward when the pet is interested or playing,
+flattens them back when it refuses or is bathed, lets them droop sideways when sad or ill, swivels
+them and twitches one now and then.
+
+The models have no mouth to open, so `src/scene/pet/mouth.ts` adds one on the face (attached to
+the head bone): a dark cavity under the mouth line, a tongue and two small fangs. It opens with
+meows and barks (the audio engine reports the last vocal sound), for yawns (waking up, or now and
+then when tired, with the eyes squeezed shut), for chewing, lapping water and licking while
+grooming; happy dogs pant with the tongue out. Configured per species in `mouth`.
+
 ### Procedural animation
 
 `src/scene/rig/animator.ts` builds a target pose every frame from layers and eases every bone
