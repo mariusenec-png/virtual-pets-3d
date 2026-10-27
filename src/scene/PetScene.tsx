@@ -8,6 +8,7 @@ import { CatchScene } from './minigame/CatchScene';
 import { useGameStore } from '../store/gameStore';
 import { Pet } from './pet/Pet';
 import { Room } from './Room';
+import { SoftEnvironment } from './SoftEnvironment';
 import { graphicsProfile } from '../config/device';
 
 /** Fur is on its own render layer so contact shadows skip it; the main camera enables it. */
@@ -21,14 +22,15 @@ export function PetScene({ speciesId, petId }: { speciesId: SpeciesId; petId: st
       shadows
       dpr={[1, gfx.maxDpr]}
       camera={{ position: [0.4, 1.25, 2.9], fov: 42, near: 0.05, far: 50 }}
-      gl={{ antialias: true, preserveDrawingBuffer: false }}
+      gl={{ antialias: true, preserveDrawingBuffer: false, alpha: false }}
       onCreated={({ camera }) => camera.layers.enable(FUR_LAYER)}
     >
       <color attach="background" args={['#f3e7d8']} />
       <fog attach="fog" args={['#f3e7d8', 6, 12]} />
 
-      <hemisphereLight args={['#fff6ea', '#b89a7a', 0.9]} />
-      <ambientLight intensity={0.25} />
+      <SoftEnvironment intensity={0.4} />
+      <hemisphereLight args={['#fff6ea', '#b89a7a', 0.7]} />
+      <ambientLight intensity={0.15} />
       <directionalLight
         position={[2.5, 4.5, 2.5]}
         intensity={1.6}

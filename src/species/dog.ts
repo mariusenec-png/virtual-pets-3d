@@ -1,6 +1,7 @@
 import { t } from '../i18n';
 import type { SpeciesDefinition } from './types';
 import { assetUrl } from '../config/assets';
+import { DOG_RIG } from './rigs';
 
 export const DOG: SpeciesDefinition = {
   id: 'dog',
@@ -19,6 +20,17 @@ export const DOG: SpeciesDefinition = {
       return t('species.dog.note');
     },
   },
+  rig: DOG_RIG,
+  // Plain coat with a slightly darker back and a lighter belly.
+  coat: {
+    stripeColor: '#8a7360',
+    stripeStrength: 0,
+    stripeFrequency: 0,
+    backShade: 0.45,
+    bellyColor: '#f1dfc2',
+    bellyStrength: 0.45,
+    sockStrength: 0.2,
+  },
   stages: {
     baby: { height: 0.4, eyeScale: 1.3, proportions: [1.06, 0.95, 0.88], furLength: 1.5, furDensity: 0.85 },
     young: { height: 0.58, eyeScale: 1.12, proportions: [1.02, 0.98, 0.95], furLength: 1.2, furDensity: 0.92 },
@@ -29,7 +41,7 @@ export const DOG: SpeciesDefinition = {
     lengthRatio: 0.014,
     densityPerHeight: 200,
     gravity: 0.25,
-    rootShade: 0.75,
+    rootShade: 0.66,
     strandVariation: 0.18,
   },
   placeholder: {

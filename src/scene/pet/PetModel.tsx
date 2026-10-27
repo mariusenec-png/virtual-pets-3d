@@ -6,9 +6,16 @@ import { FUR_SHELLS, WET_FUR_DRY_SECONDS, WET_FUR_LENGTH } from '../../config/gr
 import type { GrowthStage } from '../../game/types';
 import type { SpeciesDefinition } from '../../species/types';
 import { useGameStore } from '../../store/gameStore';
+import { applyCoatToMaterial, createCoatUniforms, type CoatUniforms } from '../coat/coat';
 import { createFurShells, findBodyMesh, type FurHandle } from '../fur/furShells';
+import { RigAnimator } from '../rig/animator';
+import { buildRig, resetRigPose, type PetRig } from '../rig/autoRig';
 import { applyEyeScale, collectEyeParts } from './eyeParts';
+import type { PetMotion } from './motion';
 import { damp } from './poses';
+
+/** Body regions used by the coat pattern when a species has no rig. */
+const DEFAULT_REGIONS = { legTop: 0.3, tailStartZ: -0.4, neckZ: 0.25 };
 
 /**
  * Loads a species GLB and normalizes it: rotated to face +Z, feet on y = 0,
@@ -16,9 +23,19 @@ import { damp } from './poses';
  * scales the result to the growth-stage height.
  *
  * Materials are cloned per instance so visual effects (e.g. dirt tint)
- * never leak into the cached GLTF. The body mesh gets shell fur.
+ * never leak into the cached GLTF. When the species has rig landmarks the
+ * body gets an automatic skeleton and is animated procedurally; the body
+ * mesh gets shell fur.
  */
-export function PetModel({ species, stage }: { species: SpeciesDefinition; stage: GrowthStage }) {
+export function PetModel({
+  species,
+  stage,
+  motion,
+}: {
+  species: SpeciesDefinition;
+  stage: GrowthStage;
+  motion: PetMotion;
+}) {
   const { scene } = useGLTF(species.model.url);
   const furQuality = useGameStore((s) => s.game.settings.furQuality);
 
@@ -46,31 +63,70 @@ export function PetModel({ species, stage }: { species: SpeciesDefinition; stage
       mesh.material = Array.isArray(mesh.material) ? mesh.material.map(clone) : clone(mesh.material);
     });
 
-    const eyes = collectEyeParts(root, species.model.eyePartPattern);
-
     const wrapper = new THREE.Group();
     wrapper.add(root);
     wrapper.scale.setScalar(1 / size.y);
-    return { wrapper, root, materials, eyes, height: size.y };
-  }, [scene, species.model.url, species.model.rotationY, species.model.eyePartPattern]);
+    wrapper.updateMatrixWorld(true);
+
+    let rig: PetRig | null = null;
+    let animator: RigAnimator | null = null;
+    const body = findBodyMesh(root, species.fur.bodyMeshName);
+    if (species.rig && body) {
+      const others: THREE.Mesh[] = [];
+      root.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh && m !== body) others.push(m);
+      });
+      rig = buildRig(wrapper, size.y, body, others, species.rig, species.id);
+      animator = new RigAnimator(rig, species.rig, species.id, Math.floor(Math.random() * 1000) + 1);
+    }
+
+    // Coat markings, painted from the rest pose in normalized model space.
+    const furBody = rig ? rig.body : body;
+    let coat: CoatUniforms | null = null;
+    if (species.coat && furBody) {
+      wrapper.updateMatrixWorld(true);
+      const toModel = new THREE.Matrix4()
+        .makeScale(1 / size.y, 1 / size.y, 1 / size.y)
+        .multiply(new THREE.Matrix4().copy(wrapper.matrixWorld).invert())
+        .multiply(furBody.matrixWorld);
+      coat = createCoatUniforms(species.coat, toModel, species.rig?.regions ?? DEFAULT_REGIONS);
+      const mats = Array.isArray(furBody.material) ? furBody.material : [furBody.material];
+      for (const m of mats) applyCoatToMaterial(m, coat);
+    }
+
+    // After rigging the eye meshes live under the head bone, so search the wrapper.
+    const eyes = collectEyeParts(wrapper, species.model.eyePartPattern);
+    return { wrapper, root, materials, eyes, height: size.y, rig, animator, body: furBody, coat };
+  }, [scene, species]);
 
   useEffect(() => () => prepared.materials.forEach((m) => m.dispose()), [prepared]);
+
+  useEffect(() => {
+    motion.rigged = !!prepared.rig;
+    return () => {
+      motion.rigged = false;
+    };
+  }, [prepared, motion]);
 
   // Fur shells, rebuilt when the quality setting changes.
   const fur = useRef<FurHandle | null>(null);
   useEffect(() => {
     const shells = FUR_SHELLS[furQuality];
     if (shells <= 0) return;
-    const body = findBodyMesh(prepared.root, species.fur.bodyMeshName);
+    const body = prepared.body;
     if (!body) return;
+    // Measure in the rest pose: the fur mask is computed from mesh positions.
+    if (prepared.rig) resetRigPose(prepared.rig);
+    prepared.wrapper.updateMatrixWorld(true);
     const excluded: THREE.Mesh[] = [];
-    prepared.root.traverse((o) => {
+    prepared.wrapper.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh && m !== body) excluded.push(m);
+      if (m.isMesh && m !== body && !m.userData.proxy) excluded.push(m);
     });
     let handle: FurHandle | null = null;
     try {
-      handle = createFurShells(body, excluded, prepared.root, prepared.height, { shells, ...species.fur });
+      handle = createFurShells(body, excluded, prepared.root, prepared.height, { shells, ...species.fur }, prepared.coat ?? undefined);
     } catch (e) {
       // Fur is cosmetic: never let it break the pet.
       console.warn('[virtual-pets-3d] Fur disabled:', e);
@@ -95,7 +151,10 @@ export function PetModel({ species, stage }: { species: SpeciesDefinition; stage
     a0.eye = damp(a0.eye, appearance.eyeScale, 2.5, dt);
     a0.furLength = damp(a0.furLength, appearance.furLength, 2.5, dt);
     a0.furDensity = damp(a0.furDensity, appearance.furDensity, 2.5, dt);
-    applyEyeScale(prepared.eyes, a0.eye);
+
+    const animator = prepared.animator;
+    if (animator) animator.update(motion.input, dt);
+    applyEyeScale(prepared.eyes, a0.eye, animator ? animator.blink : 1);
 
     const handle = fur.current;
     if (!handle) return;

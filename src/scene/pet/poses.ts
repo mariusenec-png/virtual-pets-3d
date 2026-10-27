@@ -1,4 +1,5 @@
 import type { ActivityKind } from '../../game/types';
+import { pounceCycle } from '../rig/animator';
 
 /**
  * Procedural pose generator. The supplied models have no skeleton, so
@@ -109,6 +110,29 @@ export function computePose(i: PoseInput): Pose {
         pose.scaleY *= 0.95;
         pose.pitch = 0.08;
       }
+  }
+  return pose;
+}
+
+/**
+ * Whole-body motion for rigged pets: the skeleton animator handles posture,
+ * gait and breathing, so this only adds what bones cannot do (jumping off
+ * the floor, spinning around).
+ */
+export function computeRiggedOuterPose(i: PoseInput): Pose {
+  const pose: Pose = { ...NEUTRAL_POSE };
+  if (i.walking) return pose;
+  switch (i.activity) {
+    case 'play':
+      pose.lift = pounceCycle(i.time).lift;
+      pose.yaw = Math.sin(i.time * 1.1) * 0.5;
+      break;
+    case 'celebrate':
+      pose.lift = Math.abs(Math.sin(i.progress * Math.PI * 3)) * 0.35;
+      pose.yaw = i.progress * Math.PI * 2;
+      break;
+    default:
+      break;
   }
   return pose;
 }

@@ -1,6 +1,7 @@
 import { t } from '../i18n';
 import type { SpeciesDefinition } from './types';
 import { assetUrl } from '../config/assets';
+import { CAT_RIG } from './rigs';
 
 export const CAT: SpeciesDefinition = {
   id: 'cat',
@@ -19,6 +20,17 @@ export const CAT: SpeciesDefinition = {
       return t('species.cat.note');
     },
   },
+  rig: CAT_RIG,
+  // Grey mackerel tabby with a pale belly.
+  coat: {
+    stripeColor: '#5e5e66',
+    stripeStrength: 0.85,
+    stripeFrequency: 9,
+    backShade: 0.35,
+    bellyColor: '#cfc9c0',
+    bellyStrength: 0.75,
+    sockStrength: 0.35,
+  },
   stages: {
     baby: { height: 0.42, eyeScale: 1.3, proportions: [1.06, 0.94, 0.9], furLength: 1.4, furDensity: 0.85 },
     young: { height: 0.6, eyeScale: 1.12, proportions: [1.02, 0.98, 0.96], furLength: 1.15, furDensity: 0.92 },
@@ -28,7 +40,7 @@ export const CAT: SpeciesDefinition = {
     lengthRatio: 0.02,
     densityPerHeight: 200,
     gravity: 0.35,
-    rootShade: 0.78,
+    rootShade: 0.62,
     strandVariation: 0.18,
   },
   placeholder: {

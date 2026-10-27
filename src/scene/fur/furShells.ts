@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { COAT_FRAGMENT_HEAD, COAT_VARYINGS, COAT_VERTEX, type CoatUniforms } from '../coat/coat';
 
 /**
  * Shell-based fur.
  *
- * The body mesh is drawn N extra times (one instanced draw call), each copy
- * pushed a little further out along the vertex normals. A procedural strand
+ * The body mesh is drawn N extra times (one instanced draw call, or N skinned
+ * meshes sharing the skeleton when the body is rigged), each copy pushed a
+ * little further out along the vertex normals. A procedural strand
  * pattern in the fragment shader keeps only the pixels that belong to a hair
  * strand, and strands taper with height. The result reads as a soft coat
  * without needing any fur textures or UVs.
@@ -29,7 +31,8 @@ export interface FurOptions {
 }
 
 export interface FurHandle {
-  object: THREE.InstancedMesh;
+  /** Add this as a child of the body mesh. */
+  object: THREE.Object3D;
   /** Updates sway time and the length/density multipliers (wet fur, growth stage). */
   update(time: number, lengthScale: number, densityScale?: number): void;
   dispose(): void;
@@ -109,7 +112,12 @@ function cachedFurMask(body: THREE.Mesh, excluded: THREE.Mesh[], radius: number)
   return mask;
 }
 
-function makeFurMaterial(base: THREE.Material, uniforms: Record<string, THREE.IUniform>): THREE.MeshStandardMaterial {
+function makeFurMaterial(
+  base: THREE.Material,
+  uniforms: Record<string, THREE.IUniform>,
+  perMesh: boolean,
+  coat: boolean,
+): THREE.MeshStandardMaterial {
   const src = base as THREE.MeshStandardMaterial;
   // Prefer the untinted color if a visual effect (e.g. dirt) already changed it.
   const baseColor = (src.userData?.baseColor as THREE.Color | undefined) ?? src.color;
@@ -122,6 +130,11 @@ function makeFurMaterial(base: THREE.Material, uniforms: Record<string, THREE.IU
   });
   mat.name = `${base.name || 'body'} (fur)`;
   mat.alphaToCoverage = true;
+  // Skinned shells are separate meshes with their own shell index uniform.
+  const defines: Record<string, string> = {};
+  if (perMesh) defines.FUR_PER_MESH = '';
+  if (coat) defines.FUR_COAT = '';
+  mat.defines = defines;
 
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -134,23 +147,35 @@ uniform float uFurLength;
 uniform float uShells;
 uniform float uTime;
 uniform float uGravity;
+uniform float uShellIndex;
 varying vec3 vFurBase;
 varying float vFurH;
-varying float vFurMask;`,
+varying float vFurMask;
+#ifdef FUR_COAT
+${COAT_VARYINGS}
+#endif`,
       )
       .replace(
         '#include <begin_vertex>',
-        `float furH = (float(gl_InstanceID) + 1.0) / uShells;
+        `#ifdef FUR_PER_MESH
+float furH = (uShellIndex + 1.0) / uShells;
+#else
+float furH = (float(gl_InstanceID) + 1.0) / uShells;
+#endif
 float furLen = uFurLength * furMask;
 vec3 transformed = vec3(position);
-transformed += normalize(objectNormal) * furLen * furH;
+// Rest-pose normal: skinning is applied to the displaced position afterwards.
+transformed += normalize(normal) * furLen * furH;
 // Tips droop and sway a little.
 transformed.y -= uGravity * furLen * furH * furH;
 transformed.xz += vec2(sin(uTime * 1.7 + position.y * 60.0), cos(uTime * 1.3 + position.x * 60.0))
   * furLen * 0.12 * furH * furH;
 vFurBase = position;
 vFurH = furH;
-vFurMask = furMask;`,
+vFurMask = furMask;
+#ifdef FUR_COAT
+${COAT_VERTEX}
+#endif`,
       );
 
     shader.fragmentShader = shader.fragmentShader
@@ -163,6 +188,10 @@ uniform float uStrandVariation;
 varying vec3 vFurBase;
 varying float vFurH;
 varying float vFurMask;
+#ifdef FUR_COAT
+${COAT_VARYINGS}
+${COAT_FRAGMENT_HEAD}
+#endif
 
 float furHash(vec3 p) {
   p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419));
@@ -186,6 +215,9 @@ float furStrand(vec3 p, out float rnd) {
       .replace(
         '#include <alphatest_fragment>',
         `#include <alphatest_fragment>
+#ifdef FUR_COAT
+diffuseColor.rgb = coatColor(diffuseColor.rgb, vCoatPos, normalize(vCoatNormal));
+#endif
 {
   vec3 p = vFurBase * uDensity;
   float r1; float r2;
@@ -195,13 +227,13 @@ float furStrand(vec3 p, out float rnd) {
   if (cov < 0.02) discard;
   diffuseColor.a = cov;
   float rnd = c1 >= c2 ? r1 : r2;
-  float shade = mix(uRootShade, 1.04, vFurH * vFurH);
+  float shade = mix(uRootShade, 0.97, vFurH * vFurH);
   diffuseColor.rgb *= shade * (1.0 - uStrandVariation * 0.5 + uStrandVariation * rnd);
 }`,
       );
   };
   // Distinct cache key so three does not reuse the plain standard program.
-  mat.customProgramCacheKey = () => 'fur-shells-v1';
+  mat.customProgramCacheKey = () => 'fur-shells-v2';
   return mat;
 }
 
@@ -217,6 +249,7 @@ export function createFurShells(
   space: THREE.Object3D,
   modelHeight: number,
   opts: FurOptions,
+  coat?: CoatUniforms,
 ): FurHandle | null {
   if (opts.shells <= 0) return null;
   const normal = body.geometry.getAttribute('normal');
@@ -246,37 +279,72 @@ export function createFurShells(
     uDensity: { value: density },
     uRootShade: { value: opts.rootShade },
     uStrandVariation: { value: opts.strandVariation },
+    ...coat,
   };
 
   const baseMaterial = Array.isArray(body.material) ? body.material[0] : body.material;
-  const material = makeFurMaterial(baseMaterial, uniforms);
-  const shells = new THREE.InstancedMesh(geometry, material, opts.shells);
-  const identity = new THREE.Matrix4();
-  for (let i = 0; i < opts.shells; i++) shells.setMatrixAt(i, identity);
-  shells.instanceMatrix.needsUpdate = true;
-  shells.name = 'fur-shells';
-  shells.castShadow = false;
-  shells.receiveShadow = true;
-  shells.frustumCulled = false;
-  // Fur must never intercept clicks (and raycasting N shells is expensive).
-  shells.raycast = () => {};
-  shells.layers.set(FUR_LAYER);
+  const skinned = (body as THREE.SkinnedMesh).isSkinnedMesh ? (body as THREE.SkinnedMesh) : null;
+  const materials: THREE.Material[] = [];
+  let object: THREE.Object3D;
+  if (skinned) {
+    const skinIndex = body.geometry.getAttribute('skinIndex');
+    const skinWeight = body.geometry.getAttribute('skinWeight');
+    if (!skinIndex || !skinWeight) return null;
+    geometry.setAttribute('skinIndex', skinIndex);
+    geometry.setAttribute('skinWeight', skinWeight);
+    const group = new THREE.Group();
+    for (let i = 0; i < opts.shells; i++) {
+      const material = makeFurMaterial(baseMaterial, { ...uniforms, uShellIndex: { value: i } }, true, !!coat);
+      materials.push(material);
+      const shell = new THREE.SkinnedMesh(geometry, material);
+      shell.bind(skinned.skeleton, skinned.bindMatrix);
+      setupShell(shell);
+      // Draw inner shells first so the outer tips blend over them.
+      shell.renderOrder = i;
+      group.add(shell);
+    }
+    object = group;
+  } else {
+    const material = makeFurMaterial(baseMaterial, { ...uniforms, uShellIndex: { value: 0 } }, false, !!coat);
+    materials.push(material);
+    const shells = new THREE.InstancedMesh(geometry, material, opts.shells);
+    const identity = new THREE.Matrix4();
+    for (let i = 0; i < opts.shells; i++) shells.setMatrixAt(i, identity);
+    shells.instanceMatrix.needsUpdate = true;
+    setupShell(shells);
+    object = shells;
+  }
+  object.name = 'fur-shells';
 
   return {
-    object: shells,
+    object,
     update(time, lengthScale, densityScale = 1) {
       uniforms.uTime.value = time;
       uniforms.uFurLength.value = furLength * lengthScale;
       uniforms.uDensity.value = density * densityScale;
     },
     dispose() {
-      shells.removeFromParent();
+      object.removeFromParent();
       // Position/normal/uv are shared with the body; three re-uploads them on demand.
       geometry.dispose();
-      material.dispose();
-      shells.dispose();
+      for (const m of materials) m.dispose();
+      if ((object as THREE.InstancedMesh).isInstancedMesh) (object as THREE.InstancedMesh).dispose();
     },
   };
+}
+
+function setupShell(shell: THREE.Mesh): void {
+  shell.castShadow = false;
+  shell.receiveShadow = true;
+  shell.frustumCulled = false;
+  // Fur must never intercept clicks (and raycasting N shells is expensive).
+  shell.raycast = () => {};
+  shell.layers.set(FUR_LAYER);
+  // Alpha-to-coverage needs the strand alpha in the shader, but writing it to
+  // the framebuffer would make the canvas see-through there (the page would
+  // shine through and the coat would look frosted). Keep the stored alpha.
+  shell.onBeforeRender = (renderer) => renderer.getContext().colorMask(true, true, true, false);
+  shell.onAfterRender = (renderer) => renderer.getContext().colorMask(true, true, true, true);
 }
 
 /** Picks the body mesh: by name when given, otherwise the mesh with the most vertices. */

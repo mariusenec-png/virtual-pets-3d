@@ -17,7 +17,8 @@ import { SymptomBubble } from '../effects/SymptomBubble';
 import { ModelErrorBoundary } from './ModelErrorBoundary';
 import { PetModel } from './PetModel';
 import { PlaceholderPet } from './PlaceholderPet';
-import { computePose, damp, dampAngle, NEUTRAL_POSE, type Pose } from './poses';
+import { createPetMotion } from './motion';
+import { computePose, computeRiggedOuterPose, damp, dampAngle, NEUTRAL_POSE, type Pose } from './poses';
 import { useDirtTint } from './useDirtTint';
 import { t } from '../../i18n';
 
@@ -63,6 +64,8 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     proportions: [...appearance.proportions] as [number, number, number],
   });
 
+  const motion = useRef(createPetMotion(targetHeight)).current;
+
   useDirtTint(modelRoot);
 
   useFrame((three, rawDt) => {
@@ -97,7 +100,8 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
       // Where should the pet be?
       let target = HOME;
       let face: THREE.Vector3 | null = CAMERA_DIR;
-      const reach = st.height * 0.75;
+      // Rigged pets lower their head into the bowl, so they stand closer.
+      const reach = motion.rigged ? Math.max(0, st.height * 0.5 - 0.1) : st.height * 0.75;
       if (active?.kind === 'eat') {
         target = approach(FOOD, reach + 0.12);
         face = FOOD;
@@ -129,7 +133,7 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
     }
 
     // Pose.
-    const targetPose = computePose({
+    const poseInput = {
       time: three.clock.elapsedTime,
       activity: mg ? null : (active?.kind ?? null),
       progress,
@@ -137,14 +141,30 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
       walking,
       sleeping: !mg && sleeping,
       unwell: !!pet.illness || pet.needs.health < NEEDS.health.warnBelow,
-    });
-    if (mg) {
-      // Hop when catching, shake the head after a hazard.
-      const sinceCatch = now - catchRuntime.lastCatchAt;
-      if (sinceCatch < 300) targetPose.lift = 0.22 * (1 - sinceCatch / 300);
-      const sinceHazard = now - catchRuntime.lastHazardAt;
-      if (sinceHazard < 500) targetPose.yaw = Math.sin(three.clock.elapsedTime * 30) * 0.45;
-    }
+    };
+    const sinceCatch = now - catchRuntime.lastCatchAt;
+    const sinceHazard = now - catchRuntime.lastHazardAt;
+    const hop = mg && sinceCatch < 300 ? 1 - sinceCatch / 300 : 0;
+    const flinch = mg && sinceHazard < 500 ? 1 - sinceHazard / 500 : 0;
+
+    // Inputs for the skeleton animator (PetModel).
+    const mi = motion.input;
+    mi.time = poseInput.time;
+    mi.speed = walking ? (mg ? Math.abs(mg.petVelocity) : WALK_SPEED) : 0;
+    mi.height = st.height;
+    mi.activity = poseInput.activity;
+    mi.progress = progress;
+    mi.arrived = poseInput.arrived;
+    mi.sleeping = poseInput.sleeping;
+    mi.unwell = poseInput.unwell;
+    mi.happiness = pet.needs.happiness;
+    mi.hop = hop;
+    mi.flinch = flinch;
+
+    const targetPose = motion.rigged ? computeRiggedOuterPose(poseInput) : computePose(poseInput);
+    // Mini-game: hop when catching; without a skeleton, shake the whole body after a hazard.
+    if (hop > 0) targetPose.lift = 0.22 * hop;
+    if (flinch > 0 && !motion.rigged) targetPose.yaw = Math.sin(three.clock.elapsedTime * 30) * 0.45;
     const p = st.pose;
     const lambda = 14;
     p.lift = damp(p.lift, targetPose.lift, lambda, dt);
@@ -184,7 +204,7 @@ export function Pet({ speciesId }: { speciesId: SpeciesId }) {
               fallback={<PlaceholderPet species={species} />}
             >
               <Suspense fallback={<LoadingMarker />}>
-                <PetModel species={species} stage={stage} />
+                <PetModel species={species} stage={stage} motion={motion} />
               </Suspense>
             </ModelErrorBoundary>
           </group>

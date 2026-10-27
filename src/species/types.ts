@@ -1,4 +1,6 @@
 import type { GrowthStage, NeedId, SpeciesId } from '../game/types';
+import type { CoatStyle } from '../scene/coat/coatTypes';
+import type { RigConfig } from '../scene/rig/rigTypes';
 
 /**
  * A species definition describes everything species-specific: the 3D asset,
@@ -64,6 +66,13 @@ export interface SpeciesDefinition {
   available: boolean;
   unavailableReason?: string;
   model: SpeciesModelConfig;
+  /**
+   * Landmarks for the automatic skeleton (the models ship without one).
+   * Without it the pet is animated by moving the whole model.
+   */
+  rig?: RigConfig;
+  /** Procedural markings painted on skin and fur (tabby stripes, belly...). */
+  coat?: CoatStyle;
   stages: Record<GrowthStage, StageAppearance>;
   fur: FurStyle;
   placeholder: PlaceholderColors & { earShape: 'pointy' | 'floppy'; tailLength: number };

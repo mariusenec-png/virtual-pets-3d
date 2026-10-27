@@ -1,47 +1,63 @@
 import * as THREE from 'three';
 
-export interface EyePart {
-  node: THREE.Object3D;
-  basePosition: THREE.Vector3;
-  baseScale: THREE.Vector3;
-  /** Center the part scales around (the eyeball it belongs to). */
-  pivot: THREE.Vector3;
+/**
+ * One eye: a pivot group placed at the eyeball center that holds every
+ * matching part (eyeball, pupil, glint, socket). Scaling the group resizes
+ * the eye around its center (babies have bigger eyes); squashing it
+ * vertically closes the eye (blinking, sleeping).
+ */
+export interface EyeGroup {
+  pivot: THREE.Group;
 }
 
+const tmpBox = new THREE.Box3();
+const tmpSphere = new THREE.Sphere();
+
 /**
- * Groups eye meshes (matched by name) around their eyeball so they can be
- * scaled together: bigger eyes make babies look like babies.
+ * Groups eye meshes (matched by name) per eyeball. Must be called once the
+ * meshes have their final parents (after rigging, the head bone), since the
+ * pivot groups are inserted under that parent.
  */
-export function collectEyeParts(root: THREE.Object3D, pattern: string): EyePart[] {
+export function collectEyeParts(root: THREE.Object3D, pattern: string): EyeGroup[] {
   const re = new RegExp(pattern, 'i');
-  const parts: { node: THREE.Object3D; radius: number }[] = [];
+  root.updateWorldMatrix(true, true);
+  const parts: { node: THREE.Mesh; center: THREE.Vector3; radius: number }[] = [];
   root.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (!m.isMesh || !re.test(m.name)) return;
-    m.geometry.computeBoundingSphere();
-    const r = (m.geometry.boundingSphere?.radius ?? 0) * Math.max(m.scale.x, m.scale.y, m.scale.z);
-    parts.push({ node: m, radius: r });
+    if (!m.isMesh || !re.test(m.name) || !m.parent) return;
+    m.geometry.computeBoundingBox();
+    tmpBox.copy(m.geometry.boundingBox!).applyMatrix4(m.matrixWorld);
+    tmpBox.getBoundingSphere(tmpSphere);
+    parts.push({ node: m, center: tmpSphere.center.clone(), radius: tmpSphere.radius });
   });
   // Largest parts become anchors (eyeballs); smaller parts join the nearest anchor.
   parts.sort((a, b) => b.radius - a.radius);
-  const anchors: { center: THREE.Vector3; radius: number }[] = [];
-  const result: EyePart[] = [];
+  const anchors: { center: THREE.Vector3; radius: number; parent: THREE.Object3D; members: THREE.Mesh[] }[] = [];
   for (const p of parts) {
-    const pos = p.node.position.clone();
-    let anchor = anchors.find((a) => a.center.distanceTo(pos) < a.radius * 1.6);
+    let anchor = anchors.find((a) => a.parent === p.node.parent && a.center.distanceTo(p.center) < a.radius * 1.6);
     if (!anchor) {
-      anchor = { center: pos.clone(), radius: p.radius };
+      anchor = { center: p.center, radius: p.radius, parent: p.node.parent!, members: [] };
       anchors.push(anchor);
     }
-    result.push({ node: p.node, basePosition: pos, baseScale: p.node.scale.clone(), pivot: anchor.center });
+    anchor.members.push(p.node);
   }
-  return result;
+  return anchors.map((a) => {
+    const pivot = new THREE.Group();
+    pivot.name = 'eye-pivot';
+    a.parent.add(pivot);
+    a.parent.updateWorldMatrix(true, false);
+    pivot.position.copy(a.parent.worldToLocal(a.center.clone()));
+    pivot.updateMatrixWorld(true);
+    for (const m of a.members) pivot.attach(m);
+    return { pivot };
+  });
 }
 
-/** Scales eye parts around their eyeball pivots (1 = original size). */
-export function applyEyeScale(eyes: EyePart[], scale: number): void {
-  for (const e of eyes) {
-    e.node.position.copy(e.basePosition).sub(e.pivot).multiplyScalar(scale).add(e.pivot);
-    e.node.scale.copy(e.baseScale).multiplyScalar(scale);
-  }
+/**
+ * Scales eyes around their centers (1 = original size). `open` squashes
+ * them vertically (1 = open, ~0 = closed). The vertical axis is the parent's
+ * Y, which is "up" for the model root and for the rig's head bone.
+ */
+export function applyEyeScale(eyes: EyeGroup[], scale: number, open = 1): void {
+  for (const e of eyes) e.pivot.scale.set(scale, scale * open, scale);
 }

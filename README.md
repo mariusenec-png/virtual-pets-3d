@@ -111,7 +111,7 @@ Other scripts:
 - Settings → Sound: on/off, Master / Music / Effects volume (saved). 🔊/🔇 toggle in the top bar.
 - Audio starts after the first click or key press (browser autoplay rules).
 
-### Milestone 6 (this version)
+### Milestone 6
 
 - **Romanian and English UI** (Settings → Language: Automatic / Română / English; automatic follows
   the browser language). All texts, game messages, item and illness names are translated
@@ -130,6 +130,21 @@ Other scripts:
 Note: installing the app and offline mode need HTTPS (or `localhost`). Over the plain
 `http://192.168…` address the game works on the phone, but cannot be installed there yet;
 that will work once the game is hosted on an HTTPS site.
+
+### Milestone 7 (this version)
+
+- **More lifelike, fluid animals**: the models get an automatic skeleton when they load (21 bones
+  with automatic skin weights, see `docs/ASSETS.md`), animated procedurally: a trot with real leg
+  steps, breathing, blinking, a head that looks around, a tail that sways (cat) or wags with the
+  mood (dog), sitting down after a while, curling up to sleep (dogs stretch out with the head on
+  their paws), head in the bowl while eating and drinking, a stalk-and-pounce cycle while playing,
+  head tilt and half-closed eyes when petted, a full-body shake after the bath, a stretch when
+  waking up, a head shake when refusing, head and tail low when ill.
+- Fur follows the skeleton, and no longer looks frosted (it used to let the page background show
+  through).
+- **Coat markings**: the cat is a grey tabby with a pale belly and light paws; the dog has a
+  darker back and a lighter belly.
+- Softer, more natural lighting (procedural environment light).
 
 ## Publishing (GitHub Pages)
 
@@ -155,7 +170,8 @@ src/
                  progression, household (multiple pets)
   persistence/   Versioned save/load with validation and repair
   store/         Zustand store that connects game logic to the UI and scene
-  scene/         React Three Fiber scene: room, props, pet, effects
+  scene/         React Three Fiber scene: room, props, pet, effects,
+                 rig/ (automatic skeleton + procedural animation), fur/, coat/
   ui/            HUD, menus, dialogs
   audio/         Web Audio engine, synthesized sound effects, generative music
   i18n/          English and Romanian texts
